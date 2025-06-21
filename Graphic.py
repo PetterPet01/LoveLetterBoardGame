@@ -17,9 +17,18 @@ from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle, RoundedRectangle, BorderImage
 from kivy.uix.floatlayout import FloatLayout
 from kivy.properties import ListProperty
+from kivy.uix.screenmanager import ScreenManager, Screen, FadeTransition
+from kivy.uix.image import AsyncImage
+from kivy.animation import Animation
+from kivy.core.audio import SoundLoader
+from kivy.metrics import dp
+from kivy.uix.widget import Widget
+
+INTRO_BACKGROUND = "assets/intro.jpg"  # Tạo file này hoặc dùng ảnh có sẵn
+RULES_BACKGROUND = "assets/rule.jpg"  # Tạo file này hoặc dùng ảnh có sẵn
 
 # --- Import logic game from file game_logic.py ---
-from Logic import (
+from logic4 import (
     Player, Deck, GameRound, Card,
     CARD_PROTOTYPES, CARDS_DATA_RAW,
     CARD_FOLDER, CARD_BACK_IMAGE, ELIMINATED_IMAGE
@@ -30,6 +39,210 @@ Window.size = (1000, 800)
 Window.clearcolor = (0.1, 0.1, 0.2, 1)
 
 # --- Kivy UI and Game Session Management ---
+
+class IntroScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
+        
+        # Tạo background cho màn hình intro
+        with self.canvas.before:
+            Color(0.1, 0.1, 0.2, 1)
+            self.bg = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self._update_bg, size=self._update_bg)
+        
+        # Logo và tên game
+        logo_box = BoxLayout(orientation='vertical', size_hint=(1, 0.6))
+        
+        # Kiểm tra xem có file intro_background không, nếu có thì dùng
+        if os.path.exists(INTRO_BACKGROUND):
+            game_logo = AsyncImage(source=INTRO_BACKGROUND, allow_stretch=True, keep_ratio=True)
+        else:
+            # Nếu không có file, tạo hiển thị text logo
+            game_logo = BoxLayout(orientation='vertical')
+            with game_logo.canvas.before:
+                Color(0.15, 0.15, 0.3, 1)
+                RoundedRectangle(pos=game_logo.pos, size=game_logo.size, radius=[20,])
+            game_logo.bind(pos=self._update_logo_bg, size=self._update_logo_bg)
+            
+            title = StyledLabel(
+                text="LOVE LETTER", 
+                font_size=48, 
+                color=(1, 0.8, 0.8, 1),
+                bold=True,
+                outline_width=2,
+                outline_color=(0.5, 0, 0.2, 1)
+            )
+            subtitle = StyledLabel(
+                text="Board Game", 
+                font_size=24,
+                color=(1, 0.9, 0.7, 1)
+            )
+            game_logo.add_widget(Widget(size_hint_y=0.3))  # Padding
+            game_logo.add_widget(title)
+            game_logo.add_widget(subtitle)
+            game_logo.add_widget(Widget(size_hint_y=0.3))  # Padding
+            
+        logo_box.add_widget(game_logo)
+        self.layout.add_widget(logo_box)
+        
+        # Thông tin ngắn về game
+        intro_text = (
+            "Chinh phục trái tim của Công chúa bằng lá thư tình!\n\n"
+            "Love Letter là trò chơi thẻ bài chiến thuật nhanh gọn,\n"
+            "nơi bạn cố gắng đưa thư tình của mình đến tay Công chúa."
+        )
+        intro_label = StyledLabel(
+            text=intro_text,
+            font_size=18,
+            halign='center',
+            valign='center',
+            size_hint_y=0.2
+        )
+        intro_label.bind(size=intro_label.setter('text_size'))
+        self.layout.add_widget(intro_label)
+        
+        # Nút next để chuyển tới màn hình luật chơi
+        button_box = BoxLayout(size_hint_y=0.2, padding=[dp(100), dp(10)])
+        next_button = Button(
+            text="Xem Luật Chơi", 
+            size_hint=(0.5, 0.7),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5},
+            background_color=(0.6, 0.4, 0.8, 1),
+            font_size=20,
+            bold=True
+        )
+        next_button.bind(on_press=self.go_to_rules)
+        button_box.add_widget(next_button)
+        self.layout.add_widget(button_box)
+        
+        self.add_widget(self.layout)
+        
+        # Animation khi màn hình xuất hiện
+        self.opacity = 0
+        anim = Animation(opacity=1, duration=1)
+        Clock.schedule_once(lambda dt: anim.start(self), 0.1)
+        
+    def _update_bg(self, instance, value):
+        self.bg.pos = self.pos
+        self.bg.size = self.size
+        
+    def _update_logo_bg(self, instance, value):
+        for child in instance.canvas.before.children:
+            if isinstance(child, RoundedRectangle):
+                child.pos = instance.pos
+                child.size = instance.size
+                
+    def go_to_rules(self, instance):
+        # Transition to rules screen
+        self.manager.current = 'rules'
+
+
+class RulesScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
+        
+        # Tạo background cho màn hình rules
+        with self.canvas.before:
+            Color(0.1, 0.1, 0.2, 1)
+            self.bg = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self._update_bg, size=self._update_bg)
+        
+        # Tiêu đề luật chơi
+        title = StyledLabel(
+            text="Luật Chơi", 
+            font_size=32, 
+            color=(1, 0.8, 0.2, 1),
+            size_hint_y=0.1
+        )
+        self.layout.add_widget(title)
+        
+        # Luật chơi trong ScrollView để cuộn được
+        scroll_view = ScrollView(size_hint=(1, 0.7))
+        rules_content = BoxLayout(orientation='vertical', 
+                                 size_hint_y=None, 
+                                 spacing=15,
+                                 padding=[15, 15])
+        rules_content.bind(minimum_height=rules_content.setter('height'))
+        
+        # Thêm các quy tắc game
+        rules_text = [
+            ("Mục Tiêu:", "Giành được nhiều tokens nhất bằng cách tồn tại đến cuối vòng hoặc loại bỏ đối thủ."),
+            ("Số Token Cần Thắng:", "2 người chơi: 7 tokens\n3 người chơi: 5 tokens\n4 người chơi: 4 tokens\n5+ người chơi: 3 tokens"),
+            ("Cách Chơi:", "Mỗi lượt, người chơi rút 1 lá bài, sau đó chơi 1 trong 2 lá đang có."),
+            ("Thứ Tự Lá Bài:", "1-Guard: Đoán lá bài của đối thủ (trừ Guard). Nếu đúng, đối thủ bị loại.\n"
+             "2-Priest: Xem lá bài của đối thủ.\n"
+             "3-Baron: So sánh lá bài với đối thủ, người có lá thấp hơn bị loại.\n"
+             "4-Handmaid: Bảo vệ bạn khỏi hiệu ứng của người khác đến lượt sau.\n"
+             "5-Prince: Buộc người chơi (có thể là bản thân) bỏ lá hiện tại và rút lá mới.\n"
+             "6-King: Tráo đổi lá bài với người chơi khác.\n"
+             "7-Countess: Phải đánh nếu có King hoặc Prince trên tay.\n"
+             "8-Princess: Bị loại nếu bạn bỏ lá này vì bất kỳ lý do gì.")
+        ]
+        
+        for title, desc in rules_text:
+            rule_box = BoxLayout(orientation='vertical', 
+                                size_hint_y=None)
+            rule_box.bind(minimum_height=rule_box.setter('height'))
+            
+            # Tiêu đề quy tắc
+            rule_title = StyledLabel(
+                text=title, 
+                font_size=18, 
+                bold=True,
+                color=(1, 0.7, 0.4, 1),
+                size_hint_y=None,
+                height=dp(30)
+            )
+            rule_box.add_widget(rule_title)
+            
+            # Mô tả quy tắc
+            rule_desc = StyledLabel(
+                text=desc,
+                font_size=16,
+                size_hint_y=None,
+                text_size=(None, None)
+            )
+            rule_desc.bind(texture_size=rule_desc.setter('size'))
+            rule_box.add_widget(rule_desc)
+            
+            # Thêm padding
+            rule_box.add_widget(Widget(size_hint_y=None, height=10))
+            
+            rules_content.add_widget(rule_box)
+        
+        scroll_view.add_widget(rules_content)
+        self.layout.add_widget(scroll_view)
+        
+        # Nút để bắt đầu game
+        button_box = BoxLayout(size_hint_y=0.2, padding=[dp(100), dp(10)])
+        start_button = Button(
+            text="Bắt Đầu Game", 
+            size_hint=(0.5, 0.7),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5},
+            background_color=(0.3, 0.6, 0.3, 1),
+            font_size=20,
+            bold=True
+        )
+        start_button.bind(on_press=self.start_game)
+        button_box.add_widget(start_button)
+        self.layout.add_widget(button_box)
+        
+        self.add_widget(self.layout)
+        
+    def _update_bg(self, instance, value):
+        self.bg.pos = self.pos
+        self.bg.size = self.size
+        
+    def start_game(self, instance):
+        # Chuyển tới màn hình game chính
+        self.manager.current = 'game'
+        
+        # Sau khi chuyển màn hình, khởi tạo thiết lập game
+        game_screen = self.manager.get_screen('game')
+        game = game_screen.children[0]  # LoveLetterGame là widget con duy nhất của game_screen
+        Clock.schedule_once(lambda dt: game.initialize_game_setup(), 0.5)  # Delay nhỏ để đảm bảo màn hình đã chuyển
 
 class ImageButton(ButtonBehavior, Image):
     def __init__(self, **kwargs):
@@ -81,7 +294,22 @@ class CardDisplay(BoxLayout):
 
 class LoveLetterGame(BoxLayout):  # Kivy Main Widget
     def __init__(self, **kwargs):
+        # Khởi tạo các thuộc tính cần thiết TRƯỚC khi gọi super().__init__
+        self.game_log = ["Welcome to Love Letter Kivy!"]
+        self.num_players_session = 0
+        self.players_session_list = []
+        self.human_player_id = 0
+        self.current_round_manager = None
+        self.tokens_to_win_session = 0
+        self.game_over_session_flag = True
+        self.active_popup = None
+        self.waiting_for_input = False
+        self.opponent_widgets_map = {}
+        self.animated_widget_details = {}
+        
+        # Bây giờ gọi super().__init__
         super().__init__(**kwargs)
+        
         self.orientation = 'vertical'
         self.padding = 15
         self.spacing = 10
@@ -93,25 +321,23 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
             
         self.bind(pos=self._update_bg, size=self._update_bg)
 
-        self.num_players_session = 0
-        self.players_session_list = []
-        self.human_player_id = 0
-
-        self.current_round_manager = None
-
-        self.game_log = ["Welcome to Love Letter Kivy!"]
-        self.tokens_to_win_session = 0
-        self.game_over_session_flag = True
-        self.active_popup = None
-        self.waiting_for_input = False
-
+        # Vô hiệu hóa sự kiện on_kv_post tự động và sử dụng Clock thay thế
+        # Setup game when added to the window
+        Clock.schedule_once(self._delayed_setup, 0.5)
+        
+    def _delayed_setup(self, dt):
+        """Hàm khởi tạo được gọi sau khi widget đã được thêm vào cửa sổ"""
         self._load_card_prototypes_and_images()
         self.setup_ui_placeholders()
-        self.prompt_player_count()
-        self.opponent_widgets_map = {}
-        self.animated_widget_details = {}
+        # self.prompt_player_count()
         
-        Clock.schedule_once(self._force_show_player_count_popup, 0.5)
+    def initialize_game_setup(self):
+        """Được gọi khi người dùng nhấn Bắt Đầu Game từ màn hình Rules"""
+        self.prompt_player_count()
+        
+    # Ghi đè phương thức on_kv_post để nó không làm gì cả
+    def on_kv_post(self, *args, **kwargs):
+        pass
         
     def _force_show_player_count_popup(self, dt):
         if hasattr(self, 'active_popup') and self.active_popup:
@@ -156,8 +382,36 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
 
     def setup_ui_placeholders(self):
         self.clear_widgets()
-        welcome_label = StyledLabel(text="Setting up game... Choose player count.", font_size=24)
-        self.add_widget(welcome_label)
+        
+        # Tạo màn hình chờ đẹp hơn
+        welcome_layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
+        
+        # Logo hoặc tiêu đề game
+        title_label = StyledLabel(
+            text="Love Letter Board Game", 
+            font_size=32,
+            color=(0.9, 0.7, 0.8, 1),
+            size_hint_y=0.3
+        )
+        welcome_layout.add_widget(title_label)
+        
+        # Hình ảnh minh họa
+        image_box = BoxLayout(size_hint_y=0.4)
+        if os.path.exists(CARD_BACK_IMAGE):
+            welcome_image = Image(source=CARD_BACK_IMAGE, size_hint_max_x=0.7)
+            welcome_image.pos_hint = {'center_x': 0.5}
+            image_box.add_widget(welcome_image)
+        welcome_layout.add_widget(image_box)
+        
+        # Thông điệp chờ
+        waiting_label = StyledLabel(
+            text="Đang chờ bắt đầu trò chơi...", 
+            font_size=24, 
+            size_hint_y=0.3
+        )
+        welcome_layout.add_widget(waiting_label)
+        
+        self.add_widget(welcome_layout)
 
     def prompt_player_count(self):
         self.game_log = ["Welcome to Love Letter Kivy!", "Please select number of players (2-8)."]
@@ -999,8 +1253,24 @@ class LoveLetterApp(App):
     def build(self):
         os.makedirs(CARD_FOLDER, exist_ok=True)
         self.title = 'Love Letter Board Game'
-        return LoveLetterGame()
-
+        
+        # Tạo ScreenManager để quản lý các màn hình
+        sm = ScreenManager(transition=FadeTransition(duration=0.5))
+        
+        # Thêm màn hình intro
+        sm.add_widget(IntroScreen(name='intro'))
+        
+        # Thêm màn hình luật chơi
+        sm.add_widget(RulesScreen(name='rules'))
+        
+        # Thêm màn hình game chính
+        game_screen = Screen(name='game')
+        self.game = LoveLetterGame()
+        game_screen.add_widget(self.game)
+        sm.add_widget(game_screen)
+        
+        # Bắt đầu với màn hình intro
+        return sm
 
 if __name__ == '__main__':
     os.makedirs(CARD_FOLDER, exist_ok=True)
