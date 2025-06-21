@@ -1,4 +1,3 @@
-# main.py with enhanced UI
 
 import os
 import random
@@ -23,9 +22,12 @@ from kivy.animation import Animation
 from kivy.core.audio import SoundLoader
 from kivy.metrics import dp
 from kivy.uix.widget import Widget
+from kivy.config import Config
+Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
 
 INTRO_BACKGROUND = "assets/intro.jpg"  # Tạo file này hoặc dùng ảnh có sẵn
 RULES_BACKGROUND = "assets/rule.jpg"  # Tạo file này hoặc dùng ảnh có sẵn
+EMPTY_CARD_IMAGE = "assets/cards/empty_card.png"
 
 # --- Import logic game from file game_logic.py ---
 from logic4 import (
@@ -246,6 +248,8 @@ class RulesScreen(Screen):
 
 class ImageButton(ButtonBehavior, Image):
     def __init__(self, **kwargs):
+        self.card_info_callback = kwargs.pop('card_info_callback', None)
+        self.card_data = kwargs.pop('card_data', None)
         super().__init__(**kwargs)
         self.allow_stretch = True
         self.keep_ratio = True
@@ -256,6 +260,15 @@ class ImageButton(ButtonBehavior, Image):
         
     def on_release(self):
         self.opacity = 1.0
+        
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            # Check for right click (button = 'right')
+            if touch.button == 'right' and self.card_info_callback and self.card_data:
+                self.card_info_callback(self.card_data)
+                return True
+        # Call parent method for regular click handling
+        return super(ImageButton, self).on_touch_down(touch)
 
 class StyledLabel(Label):
     def __init__(self, **kwargs):
@@ -339,6 +352,214 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
     def on_kv_post(self, *args, **kwargs):
         pass
         
+    def display_card_info_popup(self, card_data):
+        """Display detailed information about a card in a popup"""
+        self.dismiss_active_popup()  # Close any existing popup
+        
+        # Card type colors based on value
+        card_colors = {
+            0: (0.5, 0.5, 0.5),  # Assassin, Jester - Gray
+            1: (0.2, 0.4, 1.0),  # Guard - Blue
+            2: (0.7, 0.7, 1.0),  # Priest/Cardinal - Light blue
+            3: (0.6, 0.3, 0.7),  # Baron/Baroness - Purple
+            4: (0.3, 0.7, 0.3),  # Handmaid/Sycophant - Green
+            5: (0.9, 0.7, 0.2),  # Prince/Count - Gold
+            6: (0.9, 0.5, 0.3),  # King/Sheriff - Orange
+            7: (0.7, 0.3, 0.7),  # Countess/Queen Mother - Violet
+            8: (1.0, 0.3, 0.3),  # Princess - Red
+            9: (0.9, 0.9, 1.0),  # Bishop - White
+        }
+        
+        # Get card color based on value
+        card_value = card_data.value if hasattr(card_data, 'value') else 0
+        card_color = card_colors.get(card_value, (0.5, 0.5, 0.5))
+        
+        # Create main popup layout
+        popup_layout = BoxLayout(orientation='vertical', spacing=0, padding=0)
+        
+        # Create header with integrated info
+        header = BoxLayout(orientation='vertical', 
+                        size_hint_y=0.15, 
+                        padding=[15, 5])
+        with header.canvas.before:
+            Color(*card_color, 0.9)  # More opacity for better visibility
+            self.header_bg = RoundedRectangle(pos=header.pos, 
+                                            size=header.size, 
+                                            radius=[5, 5, 0, 0])
+        header.bind(pos=self._update_card_popup_header, size=self._update_card_popup_header)
+        
+        # Card name with Vietnamese name underneath
+        name_row = BoxLayout(orientation='horizontal')
+        
+        name_box = BoxLayout(orientation='vertical', size_hint_x=0.7)
+        card_name_label = StyledLabel(
+            text=f"{card_data.name}",
+            font_size=24,
+            bold=True,
+            color=(1, 1, 1, 1),
+            outline_width=2,
+            outline_color=(0, 0, 0, 0.5),
+            halign='left'
+        )
+        name_box.add_widget(card_name_label)
+        
+        # Vietnamese name directly below English name
+        if hasattr(card_data, 'vietnamese_name'):
+            viet_name_label = StyledLabel(
+                text=f"({card_data.vietnamese_name})",
+                font_size=16,
+                italic=True,
+                color=(1, 1, 1, 0.9),
+                halign='left'
+            )
+            name_box.add_widget(viet_name_label)
+        
+        # Value with more emphasis
+        value_box = BoxLayout(orientation='vertical', size_hint_x=0.3)
+        value_label = StyledLabel(
+            text=f"Value: {card_data.value}",
+            font_size=20,
+            bold=True,
+            color=(1, 1, 1, 1),
+            outline_width=1,
+            outline_color=(0, 0, 0, 0.5)
+        )
+        value_box.add_widget(value_label)
+        
+        name_row.add_widget(name_box)
+        name_row.add_widget(value_box)
+        header.add_widget(name_row)
+        
+        popup_layout.add_widget(header)
+        
+        # Main content in horizontal layout
+        content = BoxLayout(orientation='horizontal', padding=15, spacing=10)
+        
+        # Left: Card image with better framing
+        image_frame = BoxLayout(orientation='vertical', size_hint_x=0.4, padding=5)
+        with image_frame.canvas.before:
+            Color(0.15, 0.15, 0.2, 0.8)  # Darker background for contrast
+            self.image_bg = RoundedRectangle(pos=image_frame.pos, 
+                                        size=image_frame.size, 
+                                        radius=[5])
+        image_frame.bind(pos=self._update_card_popup_image_bg, 
+                    size=self._update_card_popup_image_bg)
+        
+        card_image = Image(
+            source=card_data.image_path,
+            allow_stretch=True,
+            keep_ratio=True,
+            size_hint=(0.9, 0.9),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5}  # Center the image
+        )
+        image_frame.add_widget(card_image)
+        content.add_widget(image_frame)
+        
+        # Right: Card effect with centered text
+        effect_panel = BoxLayout(orientation='vertical', 
+                            size_hint_x=0.6,
+                            spacing=10)
+        
+        # Effect title
+        effect_title = StyledLabel(
+            text="Effect:",
+            font_size=22,
+            bold=True,
+            color=(0.9, 0.8, 0.3, 1),
+            size_hint_y=None,
+            height=40,
+            halign='center'
+        )
+        effect_title.bind(size=effect_title.setter('text_size'))
+        effect_panel.add_widget(effect_title)
+        
+        # Effect content box with dark background
+        effect_box = BoxLayout(size_hint_y=1, padding=10)
+        with effect_box.canvas.before:
+            Color(0.15, 0.15, 0.2, 0.6)
+            RoundedRectangle(pos=effect_box.pos, size=effect_box.size, radius=[5])
+        effect_box.bind(pos=lambda *x: self._update_card_effect_bg(effect_box), 
+                    size=lambda *x: self._update_card_effect_bg(effect_box))
+        
+        # Scrollable effect description (centered)
+        effect_scroll = ScrollView(do_scroll_x=False)
+        
+        # Larger, centered effect text
+        effect_text = StyledLabel(
+            text=card_data.description,
+            font_size=20,
+            size_hint_y=None,
+            halign='center',
+            valign='middle',
+            color=(0.95, 0.95, 1, 1),
+            padding=(15, 15),
+            markup=True
+        )
+        
+        effect_text.bind(width=lambda *x: effect_text.setter('text_size')(effect_text, (effect_text.width, None)))
+        effect_text.bind(texture_size=effect_text.setter('size'))
+        effect_scroll.add_widget(effect_text)
+        effect_box.add_widget(effect_scroll)
+        effect_panel.add_widget(effect_box)
+        
+        content.add_widget(effect_panel)
+        popup_layout.add_widget(content)
+        
+        # Footer with close button
+        footer = BoxLayout(
+            orientation='horizontal', 
+            size_hint_y=0.1, 
+            padding=[15, 10]
+        )
+        
+        # Center the close button
+        footer.add_widget(Widget(size_hint_x=0.35))
+        
+        close_btn = Button(
+            text="Close",
+            size_hint=(0.3, 0.8),
+            background_color=(*card_color, 1.0),
+            font_size=18,
+            bold=True
+        )
+        close_btn.bind(on_press=lambda x: self.dismiss_active_popup())
+        footer.add_widget(close_btn)
+        
+        footer.add_widget(Widget(size_hint_x=0.35))
+        popup_layout.add_widget(footer)
+        
+        # Create popup with nice styling
+        self.active_popup = Popup(
+            title="Card Information",
+            content=popup_layout,
+            size_hint=(0.85, 0.8),
+            title_color=(0.9, 0.9, 0.7, 1),
+            title_size='20sp',
+            title_align='center',
+            separator_color=card_color,
+            auto_dismiss=True
+        )
+        
+        self.active_popup.open()
+
+    # Add helper method for updating effect background
+    def _update_card_effect_bg(self, instance):
+        for child in instance.canvas.before.children:
+            if isinstance(child, RoundedRectangle):
+                child.pos = instance.pos
+                child.size = instance.size
+
+    # Add helper methods to update backgrounds
+    def _update_card_popup_header(self, instance, value):
+        if hasattr(self, 'header_bg'):
+            self.header_bg.pos = instance.pos
+            self.header_bg.size = instance.size
+
+    def _update_card_popup_image_bg(self, instance, value):
+        if hasattr(self, 'image_bg'):
+            self.image_bg.pos = instance.pos
+            self.image_bg.size = instance.size
+    
     def _force_show_player_count_popup(self, dt):
         if hasattr(self, 'active_popup') and self.active_popup:
             self.active_popup.dismiss()
@@ -761,12 +982,28 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
                 if p_opponent.is_eliminated:
                     card_img_src = ELIMINATED_IMAGE
                 elif not p_opponent.hand:
-                    card_img_src = ""
+                    card_img_src = "transparent"  # Tạo một giá trị đặc biệt để xử lý
                 
                 card_box = BoxLayout(size_hint_y=0.55)
-                card_image = Image(source=card_img_src, allow_stretch=True, keep_ratio=True)
+                if card_img_src == "transparent":
+                    # Tạo một widget trống thay vì image khi không có bài
+                    card_image = Widget()
+                elif card_img_src == CARD_BACK_IMAGE or card_img_src == ELIMINATED_IMAGE:
+                    # Sử dụng Image thông thường cho card back và eliminated
+                    card_image = Image(source=card_img_src, allow_stretch=True, keep_ratio=True)
+                else:
+                    # Sử dụng card_obj từ tay người chơi đối thủ nếu có thể nhìn thấy
+                    if p_opponent.hand:
+                        card_obj = p_opponent.hand[0]
+                        card_image = ImageButton(
+                            source=card_img_src,
+                            card_info_callback=self.display_card_info_popup,
+                            card_data=card_obj
+                        )
+                    else:
+                        card_image = Widget()
+                        
                 card_box.add_widget(card_image)
-                opponent_container.add_widget(card_box)
                 
                 # Discard pile display
                 discard_box = BoxLayout(orientation='vertical', size_hint_y=0.3)
@@ -775,9 +1012,24 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
                 
                 discard_img_src = ""
                 if p_opponent.discard_pile:
-                    discard_img_src = p_opponent.discard_pile[-1].image_path
-                
-                discard_image = Image(source=discard_img_src, allow_stretch=True, keep_ratio=True, size_hint_y=0.7)
+                    discard_card = p_opponent.discard_pile[-1]
+                    discard_image = ImageButton(
+                        source=discard_card.image_path, 
+                        allow_stretch=True, 
+                        keep_ratio=True, 
+                        size_hint_y=0.7,
+                        card_info_callback=self.display_card_info_popup,
+                        card_data=discard_card
+                    )
+                else:
+                    # Sử dụng lá bài rỗng thay vì chuỗi rỗng
+                    discard_image = Image(
+                        source=EMPTY_CARD_IMAGE, 
+                        allow_stretch=True, 
+                        keep_ratio=True, 
+                        size_hint_y=0.7,
+                        opacity=0.3  # Làm mờ để chỉ ra rằng không có lá bài
+                    )
                 discard_box.add_widget(discard_image)
                 opponent_container.add_widget(discard_box)
                 
@@ -806,12 +1058,16 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
                 )
                 
                 # Card button with shadow effect when active
-                card_button = ImageButton(source=card_obj.image_path)
+                card_button = ImageButton(
+                    source=card_obj.image_path,
+                    card_info_callback=self.display_card_info_popup,
+                    card_data=card_obj
+                )
                 card_button.card_name = card_obj.name
                 card_button.bind(on_press=self.on_player_card_selected)
                 card_button.disabled = not is_player_turn_active_ui
                 card_button.opacity = 1.0 if is_player_turn_active_ui else 0.7
-                
+                                
                 # Add card value indicator
                 card_value_box = BoxLayout(size_hint_y=None, height=20)
                 card_value_label = StyledLabel(
@@ -826,8 +1082,50 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
                 self.player_hand_area.add_widget(card_container)
 
         # Update player discard display
-        self.player_discard_display.source = human_player.discard_pile[-1].image_path if human_player.discard_pile else ""
-        
+        if human_player.discard_pile:
+            discard_card = human_player.discard_pile[-1]
+            player_discard_container = BoxLayout()
+            discard_button = ImageButton(
+                source=discard_card.image_path,
+                card_info_callback=self.display_card_info_popup,
+                card_data=discard_card,
+                allow_stretch=True,
+                keep_ratio=True
+            )
+            player_discard_container.add_widget(discard_button)
+            
+            # Xóa widget cũ nếu có
+            if hasattr(self, 'player_discard_display') and self.player_discard_display in self.human_player_display_wrapper.children[-1].children:
+                self.human_player_display_wrapper.children[-1].remove_widget(self.player_discard_display)
+            
+            # Đặt widget mới vào container
+            self.player_discard_display = player_discard_container
+            discard_container = self.human_player_display_wrapper.children[-1]
+            if len(discard_container.children) > 1:  # If there's already a widget there
+                discard_container.remove_widget(discard_container.children[0])
+            discard_container.add_widget(self.player_discard_display)
+        else:
+            # Sử dụng lá bài rỗng thay vì source rỗng
+            if isinstance(self.player_discard_display, Image):
+                self.player_discard_display.source = EMPTY_CARD_IMAGE
+                self.player_discard_display.opacity = 0.3
+            else:
+                # Trong trường hợp player_discard_display là một container
+                player_discard_container = BoxLayout()
+                empty_image = Image(
+                    source=EMPTY_CARD_IMAGE,
+                    allow_stretch=True,
+                    keep_ratio=True,
+                    opacity=0.3
+                )
+                player_discard_container.add_widget(empty_image)
+                
+                # Cập nhật widget
+                self.player_discard_display = player_discard_container
+                discard_container = self.human_player_display_wrapper.children[-1]
+                if len(discard_container.children) > 1:
+                    discard_container.remove_widget(discard_container.children[0])
+                discard_container.add_widget(self.player_discard_display)
         self.log_message("", permanent=False)
     
     def _update_opponent_bg(self, instance, value):
@@ -1295,6 +1593,16 @@ if __name__ == '__main__':
             print(f"INFO: Created dummy {ELIMINATED_IMAGE}")
         except Exception as e:
             print(f"WARNING: Could not create dummy ELIMINATED_IMAGE: {e}")
+            
+    if not os.path.exists(EMPTY_CARD_IMAGE):
+        try:
+            from PIL import Image as PILImage
+            # Tạo ảnh trong suốt cho lá bài rỗng
+            img = PILImage.new('RGBA', (200, 300), color=(0, 0, 0, 0))
+            img.save(EMPTY_CARD_IMAGE)
+            print(f"INFO: Created empty card image at {EMPTY_CARD_IMAGE}")
+        except Exception as e:
+            print(f"WARNING: Could not create empty card image: {e}")
 
     for card_name_key, card_detail_raw in CARDS_DATA_RAW.items():
         v_name = card_detail_raw['vietnamese_name']
