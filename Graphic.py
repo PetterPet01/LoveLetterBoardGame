@@ -120,12 +120,7 @@ class IntroScreen(Screen):
             pos_hint={'center_x': 0.5, 'center_y': 0.2}
         )
         
-        # Thêm đường viền cho nút
-        with button_container.canvas.before:
-            Color(0.9, 0.8, 0.3, 0.7)  # Màu vàng cho viền
-            self.border_rect = RoundedRectangle(size=button_container.size, radius=[10])
-        
-        # Thêm nút bắt đầu trò chơi
+        # Thêm nút bắt đầu trò chơi (trước khi thêm viền để tránh overlay)
         start_button = Button(
             text="BẮT ĐẦU CHƠI",
             font_size=32,
@@ -152,12 +147,19 @@ class IntroScreen(Screen):
         # Thêm nút vào container
         button_container.add_widget(start_button)
         
-        # Cập nhật kích thước của đường viền khi widget thay đổi kích thước
+        # Thêm đường viền cho container nút sau khi đã thêm nút vào
+        with button_container.canvas.before:
+            Color(0.9, 0.8, 0.3, 0.7)  # Màu vàng cho viền
+            self.border_rect = RoundedRectangle(radius=[10])
+            
+        # Gọi update_rect ngay sau khi tạo để đặt vị trí ban đầu cho viền
         def update_rect(*args):
             self.border_rect.pos = button_container.pos
             self.border_rect.size = button_container.size
             
         button_container.bind(pos=update_rect, size=update_rect)
+        # Cập nhật ngay lần đầu thay vì đợi sự kiện
+        Clock.schedule_once(lambda dt: update_rect(), 0)
         
         layout.add_widget(button_container)
         self.add_widget(layout)
@@ -167,6 +169,8 @@ class IntroScreen(Screen):
 
 class RulesScreen(Screen):
     """Rules screen with fullscreen background"""
+    game_instance = None  # Will be set by app
+    
     def __init__(self, **kwargs):
         super(RulesScreen, self).__init__(**kwargs)
         layout = FloatLayout()
@@ -179,23 +183,38 @@ class RulesScreen(Screen):
             size_hint=(1, 1),
             pos_hint={'center_x': 0.5, 'center_y': 0.5}
         )
-        layout.add_widget(bg_image)
         
-        # Nút bắt đầu trò chơi (đặt ở góc dưới phải)
-        start_button = Button(
-            text="",  # Không có chữ
-            size_hint=(0.15, 0.1),
-            pos_hint={'right': 0.98, 'bottom': 0.05},
-            background_color=(0, 0, 0, 0),  # Trong suốt
-            on_press=self.start_game
+        # Thêm hint text để người dùng biết có thể nhấn vào màn hình
+        hint_label = Label(
+            text="Nhấn vào màn hình để bắt đầu chơi",
+            font_size=24,
+            bold=True,
+            color=(1, 0.9, 0.5, 1),
+            size_hint=(0.8, 0.1),
+            pos_hint={'center_x': 0.5, 'bottom': 0.05}
         )
-        layout.add_widget(start_button)
+        
+        layout.add_widget(bg_image)
+        layout.add_widget(hint_label)
+        
+        # Gắn sự kiện nhấn vào bất kỳ đâu trên màn hình
+        layout.bind(on_touch_down=self.on_layout_click)
         
         self.add_widget(layout)
         
+    def on_layout_click(self, instance, touch):
+        """Handle click anywhere on the rules screen"""
+        if self.collide_point(*touch.pos):
+            self.start_game(None)
+            return True
+        return super(RulesScreen, self).on_touch_down(touch)
+        
     def start_game(self, instance):
+        """Start the game when user clicks anywhere on the rules screen"""
         self.manager.current = 'game'
-
+        # Initialize the game when entering the game screen
+        if hasattr(self, 'game_instance') and self.game_instance:
+            Clock.schedule_once(lambda dt: self.game_instance.initialize_game_setup(), 0.1)
 
 class LoveLetterGame(BoxLayout):  
     """Main game widget containing all game logic and UI"""
@@ -1813,15 +1832,19 @@ class LoveLetterApp(App):
         # Create a screen manager for multiple screens
         sm = ScreenManager(transition=FadeTransition(duration=0.5))
         
+        # Create game instance first so it can be referenced
+        self.game = LoveLetterGame()
+        
         # Add intro screen
         sm.add_widget(IntroScreen(name='intro'))
         
-        # Add rules screen
-        sm.add_widget(RulesScreen(name='rules'))
+        # Add rules screen with access to game instance
+        rules_screen = RulesScreen(name='rules')
+        rules_screen.game_instance = self.game  # Give rules screen access to game instance
+        sm.add_widget(rules_screen)
         
         # Add main game screen
         game_screen = Screen(name='game')
-        self.game = LoveLetterGame()
         game_screen.add_widget(self.game)
         sm.add_widget(game_screen)
         
