@@ -817,54 +817,6 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
         opponents_container.add_widget(self.opponents_area_scrollview)
         game_area.add_widget(opponents_container)
         
-        # Deck area with improved styling
-        deck_container = BoxLayout(size_hint_y=0.18, spacing=15, padding=[15, 10])
-        with deck_container.canvas.before:
-            Color(0.13, 0.17, 0.25, 0.7)  # Màu tối hơn
-            RoundedRectangle(pos=deck_container.pos, size=deck_container.size, radius=[15,])
-        deck_container.bind(pos=self._update_deck_container_bg, size=self._update_deck_container_bg)
-        
-        # Deck display with shadow effect
-        deck_display = BoxLayout(orientation='vertical', size_hint_x=0.3)
-        
-        deck_frame = RelativeLayout(size_hint=(1, 1))
-        
-        for i in range(3):  # 3 lớp bài phía dưới
-            offset = 1.5 * (i + 1)
-            shadow_card = Image(
-                source=CARD_BACK_IMAGE,
-                allow_stretch=True,
-                keep_ratio=True,
-                size_hint=(0.96, 0.96),
-                pos_hint={'center_x': 0.5 - 0.01 * offset, 'center_y': 0.5 - 0.01 * offset},
-                opacity=0.6 - 0.15*i  # Mỗi lớp mờ dần
-            )
-            deck_frame.add_widget(shadow_card)
-        
-        self.deck_image = Image(
-            source=CARD_BACK_IMAGE, 
-            allow_stretch=True,
-            keep_ratio=True,
-            size_hint=(0.96, 0.96),
-            pos_hint={'center_x': 0.5, 'center_y': 0.5}
-        )
-        
-        deck_frame.add_widget(self.deck_image)
-        deck_display.add_widget(deck_frame)
-        
-        deck_info = BoxLayout(orientation='vertical', size_hint_x=0.7, padding=[5, 0, 0, 0])
-        self.deck_count_label = StyledLabel(
-            text="Cards Remaining: 0", 
-            font_size=20,  # Tăng kích thước
-            bold=True,
-            color=(0.95, 0.9, 0.6, 1)  # Màu vàng đẹp hơn
-        )
-        deck_info.add_widget(self.deck_count_label)
-        
-        deck_container.add_widget(deck_display)
-        deck_container.add_widget(deck_info)
-        game_area.add_widget(deck_container)
-        
         # Player hand area with improved styling
         self.human_player_display_wrapper = BoxLayout(orientation='vertical', size_hint_y=0.4, spacing=10)
         
@@ -898,14 +850,127 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
         player_hand_container.add_widget(self.player_hand_area)
         self.human_player_display_wrapper.add_widget(player_hand_container)
         
-        discard_container = BoxLayout(orientation='vertical', size_hint_y=0.3)
-        discard_title = StyledLabel(text="Your Discard", size_hint_y=None, height=20, font_size=14)
-        discard_container.add_widget(discard_title)
-        self.player_discard_display = Image(source="", allow_stretch=True, keep_ratio=True)
-        discard_container.add_widget(self.player_discard_display)
-        self.human_player_display_wrapper.add_widget(discard_container)
-        
         game_area.add_widget(self.human_player_display_wrapper)
+        center_game_area = BoxLayout(size_hint_y=0.2, spacing=10, padding=[10, 5])
+
+        # Khu vực bên trái: Deck (nhỏ gọn)
+        left_area = BoxLayout(orientation='vertical', size_hint_x=0.25)
+        deck_title = StyledLabel(
+            text="Deck", 
+            size_hint_y=0.2,
+            font_size=16,
+            color=(0.9, 0.9, 0.7, 1)
+        )
+        left_area.add_widget(deck_title)
+
+        # Deck nhỏ gọn với hiệu ứng 3D
+        deck_display = RelativeLayout(size_hint_y=0.6)
+        for i in range(2):  # Giảm số lớp để không tốn quá nhiều không gian
+            offset = 1.0 * (i + 1)
+            shadow_card = Image(
+                source=CARD_BACK_IMAGE,
+                allow_stretch=True,
+                keep_ratio=True,
+                size_hint=(0.8, 0.8),  # Nhỏ hơn
+                pos_hint={'center_x': 0.5 - 0.02 * offset, 'center_y': 0.5 - 0.02 * offset},
+                opacity=0.5 - 0.15*i
+            )
+            deck_display.add_widget(shadow_card)
+
+        self.deck_image = Image(
+            source=CARD_BACK_IMAGE, 
+            allow_stretch=True,
+            keep_ratio=True,
+            size_hint=(0.8, 0.8),  # Nhỏ hơn
+            pos_hint={'center_x': 0.5, 'center_y': 0.5}
+        )
+        deck_display.add_widget(self.deck_image)
+        left_area.add_widget(deck_display)
+
+        # Số lượng lá bài còn lại
+        self.deck_count_label = StyledLabel(
+            text="0 cards", 
+            size_hint_y=0.2,
+            font_size=14,
+            color=(0.9, 0.9, 0.7, 1)
+        )
+        left_area.add_widget(self.deck_count_label)
+
+        # Khu vực chính giữa: Lá bài được đánh ra gần đây (lớn)
+        center_area = BoxLayout(orientation='vertical', size_hint_x=0.5)
+        self.last_played_title = StyledLabel(
+            text="Lá bài vừa đánh", 
+            size_hint_y=0.2,
+            font_size=16,
+            bold=True,
+            color=(0.9, 0.8, 0.3, 1)
+        )
+        center_area.add_widget(self.last_played_title)
+
+        # Chứa lá bài đánh ra với hiệu ứng bóng đổ
+        played_card_frame = BoxLayout(size_hint_y=0.8, padding=[10, 5])
+        with played_card_frame.canvas.before:
+            Color(0.1, 0.15, 0.2, 0.5)  # Nền tối hơn để lá bài nổi bật
+            RoundedRectangle(pos=played_card_frame.pos, size=played_card_frame.size, radius=[10,])
+        played_card_frame.bind(pos=self._update_played_card_frame_bg, size=self._update_played_card_frame_bg)
+
+        self.last_played_card_container = RelativeLayout(size_hint=(1, 1))
+        self.last_played_card_image = Image(
+            source=EMPTY_CARD_IMAGE,
+            allow_stretch=True,
+            keep_ratio=True,
+            size_hint=(0.9, 0.9),  # Lớn hơn
+            pos_hint={'center_x': 0.5, 'center_y': 0.5},
+            opacity=0.3
+        )
+        self.last_played_card_container.add_widget(self.last_played_card_image)
+        played_card_frame.add_widget(self.last_played_card_container)
+        center_area.add_widget(played_card_frame)
+
+        # Khu vực bên phải: Thông tin trò chơi
+        right_area = BoxLayout(orientation='vertical', size_hint_x=0.25)
+        game_info_title = StyledLabel(
+            text="Thông tin", 
+            size_hint_y=0.2,
+            font_size=16,
+            color=(0.9, 0.9, 0.7, 1)
+        )
+        right_area.add_widget(game_info_title)
+
+        # Thông tin trò chơi với nền tối
+        game_info_frame = BoxLayout(orientation='vertical', size_hint_y=0.8)
+        with game_info_frame.canvas.before:
+            Color(0.1, 0.15, 0.2, 0.5)
+            RoundedRectangle(pos=game_info_frame.pos, size=game_info_frame.size, radius=[10,])
+        game_info_frame.bind(pos=self._update_game_info_frame_bg, size=self._update_game_info_frame_bg)
+
+        # Thông tin về vòng đấu và số người chơi còn lại
+        self.round_info_label = StyledLabel(
+            text="Vòng đấu đang diễn ra", 
+            font_size=12,
+            color=(0.9, 0.9, 1, 1),
+            halign='center'
+        )
+        self.round_info_label.bind(size=self.round_info_label.setter('text_size'))
+        game_info_frame.add_widget(self.round_info_label)
+
+        self.players_remaining_label = StyledLabel(
+            text="Người chơi: 0/0", 
+            font_size=12,
+            color=(0.9, 0.9, 1, 1),
+            halign='center'
+        )
+        self.players_remaining_label.bind(size=self.players_remaining_label.setter('text_size'))
+        game_info_frame.add_widget(self.players_remaining_label)
+        right_area.add_widget(game_info_frame)
+
+        # Thêm các phần vào khu vực trung tâm
+        center_game_area.add_widget(left_area)
+        center_game_area.add_widget(center_area)
+        center_game_area.add_widget(right_area)
+
+        # Thêm khu vực trung tâm vào game_area
+        game_area.add_widget(center_game_area)
         self.add_widget(game_area)
 
         # Bottom action button with improved styling
@@ -1010,11 +1075,78 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
 
         # Update deck display
         if self.current_round_manager and self.current_round_manager.deck:
-            self.deck_count_label.text = f"Cards Remaining: {self.current_round_manager.deck.count()}"
-            self.deck_image.source = CARD_BACK_IMAGE if not self.current_round_manager.deck.is_empty() else ""
+            # Cập nhật thông tin deck
+            self.deck_count_label.text = f"{self.current_round_manager.deck.count()}"
+            self.deck_image.source = CARD_BACK_IMAGE if not self.current_round_manager.deck.is_empty() else EMPTY_CARD_IMAGE
+            self.deck_image.opacity = 1.0 if not self.current_round_manager.deck.is_empty() else 0.3
+            
+            # Cập nhật thông tin trò chơi
+            active_players = sum(1 for p in self.players_session_list if not p.is_eliminated)
+            total_players = len(self.players_session_list)
+            self.players_remaining_label.text = f"Người chơi: {active_players}/{total_players}"
+            
+            # Cập nhật thông tin vòng đấu
+            if self.current_round_manager.round_active:
+                current_player = self.players_session_list[self.current_round_manager.current_player_idx].name
+                self.round_info_label.text = f"Lượt của: {current_player}"
+            else:
+                self.round_info_label.text = "Vòng đấu kết thúc"
         else:
-            self.deck_count_label.text = "Deck: N/A"
-            self.deck_image.source = ""
+            self.deck_count_label.text = "0"
+            self.deck_image.source = EMPTY_CARD_IMAGE
+            self.deck_image.opacity = 0.3
+            self.round_info_label.text = "Không có vòng đấu"
+            self.players_remaining_label.text = "Người chơi: 0/0"
+            
+        last_played_card = None
+        last_played_by = None
+
+        # Ưu tiên hiển thị lá bài của người chơi chính
+        human_player = self.players_session_list[self.human_player_id]
+        if human_player.discard_pile and len(human_player.discard_pile) > 0:
+            last_played_card = human_player.discard_pile[-1]
+            last_played_by = human_player
+        else:
+            # Nếu người chơi chính chưa đánh lá nào, tìm lá bài gần nhất từ đối thủ
+            for player in self.players_session_list:
+                if player.id != self.human_player_id and player.discard_pile and len(player.discard_pile) > 0:
+                    last_played_card = player.discard_pile[-1]
+                    last_played_by = player
+                    break
+
+        # Cập nhật hiển thị lá bài đánh ra
+        if last_played_card:
+            # Xóa widget cũ và tạo widget mới
+            self.last_played_card_container.clear_widgets()
+            
+            # Sử dụng ImageButton để người chơi có thể click xem thông tin lá bài
+            card_button = ImageButton(
+                source=last_played_card.image_path,
+                card_info_callback=self.display_card_info_popup,
+                card_data=last_played_card,
+                allow_stretch=True,
+                keep_ratio=True,
+                size_hint=(0.95, 0.95),
+                pos_hint={'center_x': 0.5, 'center_y': 0.5}
+            )
+            self.last_played_card_container.add_widget(card_button)
+            
+            # Hiển thị tên người chơi đã đánh ra lá bài
+            player_name = last_played_by.name if last_played_by else "Unknown"
+            self.last_played_title.text = f"Bài của: {player_name}"
+        else:
+            # Nếu chưa có lá bài nào được đánh ra
+            self.last_played_card_container.clear_widgets()
+            self.last_played_card_image = Image(
+                source=EMPTY_CARD_IMAGE,
+                allow_stretch=True,
+                keep_ratio=True,
+                size_hint=(0.95, 0.95),
+                pos_hint={'center_x': 0.5, 'center_y': 0.5},
+                opacity=0.3
+            )
+            self.last_played_card_container.add_widget(self.last_played_card_image)
+            self.last_played_title.text = "Chưa có bài đánh ra"
 
         # Update opponent displays with enhanced styling
         self.opponents_grid.clear_widgets()
@@ -1148,6 +1280,8 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
         human_player = self.players_session_list[self.human_player_id]
         self.player_hand_area.clear_widgets()
         
+        print(f"DEBUG: Human player hand: {[card.name for card in human_player.hand] if human_player.hand else 'empty'}")
+        
         if human_player.is_eliminated:
             self.player_hand_area.add_widget(Image(source=ELIMINATED_IMAGE, allow_stretch=True))
             self.player_hand_area.add_widget(StyledLabel(text="Eliminated!", color=(1, 0.5, 0.5, 1), font_size=24))
@@ -1159,6 +1293,7 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
 
             for card_obj in human_player.hand:
                 # Create card container with styling
+                print(f"DEBUG: Displaying card: {card_obj.name} with image path: {card_obj.image_path}")
                 card_container = BoxLayout(
                     orientation='vertical',
                     size_hint=(1 / len(human_player.hand) if len(human_player.hand) > 0 else 1, 1),
@@ -1223,51 +1358,6 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
                 card_container.add_widget(card_info_box)
                 self.player_hand_area.add_widget(card_container)
 
-        # Update player discard display
-        if human_player.discard_pile:
-            discard_card = human_player.discard_pile[-1]
-            player_discard_container = BoxLayout()
-            discard_button = ImageButton(
-                source=discard_card.image_path,
-                card_info_callback=self.display_card_info_popup,
-                card_data=discard_card,
-                allow_stretch=True,
-                keep_ratio=True
-            )
-            player_discard_container.add_widget(discard_button)
-            
-            # Xóa widget cũ nếu có
-            if hasattr(self, 'player_discard_display') and self.player_discard_display in self.human_player_display_wrapper.children[-1].children:
-                self.human_player_display_wrapper.children[-1].remove_widget(self.player_discard_display)
-            
-            # Đặt widget mới vào container
-            self.player_discard_display = player_discard_container
-            discard_container = self.human_player_display_wrapper.children[-1]
-            if len(discard_container.children) > 1:  # If there's already a widget there
-                discard_container.remove_widget(discard_container.children[0])
-            discard_container.add_widget(self.player_discard_display)
-        else:
-            # Sử dụng lá bài rỗng thay vì source rỗng
-            if isinstance(self.player_discard_display, Image):
-                self.player_discard_display.source = EMPTY_CARD_IMAGE
-                self.player_discard_display.opacity = 0.3
-            else:
-                # Trong trường hợp player_discard_display là một container
-                player_discard_container = BoxLayout()
-                empty_image = Image(
-                    source=EMPTY_CARD_IMAGE,
-                    allow_stretch=True,
-                    keep_ratio=True,
-                    opacity=0.3
-                )
-                player_discard_container.add_widget(empty_image)
-                
-                # Cập nhật widget
-                self.player_discard_display = player_discard_container
-                discard_container = self.human_player_display_wrapper.children[-1]
-                if len(discard_container.children) > 1:
-                    discard_container.remove_widget(discard_container.children[0])
-                discard_container.add_widget(self.player_discard_display)
         self.log_message("", permanent=False)
         
     def _update_card_info_box(self, instance, value):
@@ -1301,6 +1391,25 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
                 if isinstance(child, RoundedRectangle):
                     child.pos = instance.pos
                     child.size = instance.size
+                    
+                    
+    def _update_center_game_bg(self, instance, value):
+        instance.canvas.before.clear()
+        with instance.canvas.before:
+            Color(0.13, 0.17, 0.25, 0.7)  # Màu nền tối
+            RoundedRectangle(pos=instance.pos, size=instance.size, radius=[15,])
+            
+    def _update_played_card_frame_bg(self, instance, value):
+        instance.canvas.before.clear()
+        with instance.canvas.before:
+            Color(0.1, 0.15, 0.2, 0.5)  # Nền tối hơn để lá bài nổi bật
+            RoundedRectangle(pos=instance.pos, size=instance.size, radius=[10,])
+            
+    def _update_game_info_frame_bg(self, instance, value):
+        instance.canvas.before.clear()
+        with instance.canvas.before:
+            Color(0.1, 0.15, 0.2, 0.5)
+            RoundedRectangle(pos=instance.pos, size=instance.size, radius=[10,])
 
     # The rest of your methods remain unchanged...
     # Here I'll include just a sample of the UI display popup methods to show styling improvements
