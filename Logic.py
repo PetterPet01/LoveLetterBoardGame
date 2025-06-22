@@ -292,7 +292,7 @@ class GameRound:
 
         if current_player.is_cpu:
             self.log_message(f"CPU ({current_player.name}) is thinking...")
-            delay_duration = random.uniform(1.0, 2.0)
+            delay_duration = 4.0
             Clock.schedule_once(lambda dt: self._execute_cpu_turn_after_delay(current_player), delay_duration)
         else:
             self.log_message(f"Your turn, {current_player.name}. Choose a card to play.")

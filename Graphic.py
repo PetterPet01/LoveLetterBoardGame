@@ -109,13 +109,16 @@ class IntroScreen(Screen):
             size_hint=(0.95, 0.9),
             pos_hint={'center_x': 0.5, 'center_y': 0.5}
         )
+        
         def on_press(instance):
             instance.background_color = (0.9, 0.2, 0.2, 0.9)
             instance.font_size = 34
+            
         def on_release(instance):
             instance.background_color = (0.8, 0.1, 0.1, 0.85)
             instance.font_size = 32
             self.go_to_rules(instance)
+            
         start_button.bind(on_press=on_press)
         start_button.bind(on_release=on_release)
         button_container.add_widget(start_button)
