@@ -148,18 +148,7 @@ class IntroScreen(Screen):
         button_container.add_widget(start_button)
         
         # Thêm đường viền cho container nút sau khi đã thêm nút vào
-        with button_container.canvas.before:
-            Color(0.9, 0.8, 0.3, 0.7)  # Màu vàng cho viền
-            self.border_rect = RoundedRectangle(radius=[10])
-            
-        # Gọi update_rect ngay sau khi tạo để đặt vị trí ban đầu cho viền
-        def update_rect(*args):
-            self.border_rect.pos = button_container.pos
-            self.border_rect.size = button_container.size
-            
-        button_container.bind(pos=update_rect, size=update_rect)
-        # Cập nhật ngay lần đầu thay vì đợi sự kiện
-        Clock.schedule_once(lambda dt: update_rect(), 0)
+        
         
         layout.add_widget(button_container)
         self.add_widget(layout)
@@ -530,53 +519,86 @@ class LoveLetterGame(BoxLayout):
         self.add_widget(welcome_layout)
 
     def prompt_player_count(self):
-        """Show popup to select number of players"""
-        self.game_log = ["Welcome to Love Letter Kivy!", "Please select number of players (2-8)."]
+        """Show popup to select number of players (2-4) with elegant dark theme"""
+        self.game_log = ["Welcome to Love Letter Kivy!", "Please select number of players (2-4)."]
         if hasattr(self, 'message_label'): 
             self.log_message("", permanent=False)
 
-        popup_layout = BoxLayout(orientation='vertical', spacing="15dp", padding="20dp")
-        
+        # Main popup layout
+        popup_layout = BoxLayout(orientation='vertical', spacing=20, padding=[30, 30, 30, 30])
+
+        # Title
         title_label = StyledLabel(
-            text="Select Number of Players (2-8):", 
-            font_size=22,
-            size_hint_y=None, 
-            height="50dp"
+            text="Chọn số người chơi",
+            font_size=28,
+            bold=True,
+            color=(1, 0.92, 0.7, 1),
+            size_hint_y=None,
+            height=50,
+            halign='center'
         )
+        title_label.bind(size=title_label.setter('text_size'))
         popup_layout.add_widget(title_label)
-        
-        options_layout = GridLayout(cols=4, spacing="10dp", size_hint_y=None)
-        options_layout.bind(minimum_height=options_layout.setter('height'))
-        
+
+        # Subtitle
+        subtitle = StyledLabel(
+            text="(2 - 4 người, chỉ bản cơ bản)",
+            font_size=18,
+            color=(0.9, 0.9, 1, 0.8),
+            size_hint_y=None,
+            height=30,
+            halign='center'
+        )
+        subtitle.bind(size=subtitle.setter('text_size'))
+        popup_layout.add_widget(subtitle)
+
+        # Options grid
+        options_layout = GridLayout(cols=3, spacing=20, size_hint_y=None, height=70)
         for i in range(2, 5):
             btn = Button(
-                text=str(i), 
-                size_hint_y=None, 
-                height="60dp",
-                background_color=(0.3, 0.4, 0.8, 1),
-                font_size=20,
+                text=str(i),
+                size_hint=(1, None),
+                height=60,
+                background_normal='',
+                background_color=(0.13, 0.16, 0.28, 0.95),
+                color=(1, 0.95, 0.7, 1),
+                font_size=26,
                 bold=True
             )
+            # Bo góc và viền cho nút
+            with btn.canvas.before:
+                Color(0.9, 0.8, 0.3, 0.18)
+                border_rect = RoundedRectangle(pos=btn.pos, size=btn.size, radius=[18])
+            # Bind đúng vào border_rect
+            def update_border_rect(inst, val, rect=border_rect):
+                rect.pos = inst.pos
+                rect.size = inst.size
+            btn.bind(pos=update_border_rect, size=update_border_rect)
+
             btn.player_count = i
             btn.bind(on_press=self.initialize_game_with_player_count)
             options_layout.add_widget(btn)
-            
         popup_layout.add_widget(options_layout)
-        
-        self.active_popup = Popup(
-            title="Love Letter - Player Count", 
+
+        # Custom background for popup
+        class DarkPopup(Popup):
+            pass
+
+        self.active_popup = DarkPopup(
+            title="Love Letter - Player Count",
             content=popup_layout,
-            size_hint=(0.6, 0.4), 
+            size_hint=(0.55, 0.38),
             auto_dismiss=False,
             title_color=(1, 0.9, 0.8, 1),
-            title_size='20sp',
+            title_size='22sp',
             title_align='center',
-            background="atlas://data/images/defaulttheme/button_pressed"
+            separator_color=(0.8, 0.7, 0.3, 0.7),
+            background_color=(0.09, 0.09, 0.13, 0.98)
         )
         self.active_popup.open()
 
     def initialize_game_with_player_count(self, instance):
-        """Initialize a new game with the selected player count"""
+        """Initialize a new game with the selected player count (2-4)"""
         if self.active_popup:
             self.active_popup.dismiss()
             self.active_popup = None
@@ -589,15 +611,16 @@ class LoveLetterGame(BoxLayout):
             self.tokens_to_win_session = 7
         elif self.num_players_session == 3:
             self.tokens_to_win_session = 5
-        elif self.num_players_session == 4:
+        else:  # 4 players
             self.tokens_to_win_session = 4
-        else:
-            self.tokens_to_win_session = 3
+            
         self.log_message(f"Tokens needed to win: {self.tokens_to_win_session}")
 
         # Create player list with human player as ID 0
         self.players_session_list = [Player(id_num=0, name="Player 1 (You)")]
         self.human_player_id = self.players_session_list[0].id
+        
+        # Add bots (1-3)
         for i in range(1, self.num_players_session):
             self.players_session_list.append(Player(id_num=i, name=f"CPU {i}", is_cpu=True))
 
@@ -704,7 +727,7 @@ class LoveLetterGame(BoxLayout):
 
         self.opponents_area_scrollview = ScrollView(size_hint=(1, 1))
         self.opponents_grid = GridLayout(
-            cols=max(1, min(4, self.num_players_session - 1) if self.num_players_session > 1 else 1),
+            cols=min(3, self.num_players_session - 1),  # Max 3 opponents
             size_hint_x=None if self.num_players_session - 1 > 3 else 1, 
             size_hint_y=None,
             spacing=15,
@@ -1025,9 +1048,8 @@ class LoveLetterGame(BoxLayout):
             return
             
         # Set columns based on player count
-        max_cols = 4
-        self.opponents_grid.cols = min(max_cols, max(1, self.num_players_session - 1))
-        self.opponents_grid.size_hint_x = None if self.num_players_session - 1 > max_cols else 1
+        self.opponents_grid.cols = min(3, self.num_players_session - 1)  # Max 3 opponents
+        self.opponents_grid.size_hint_x = None if self.num_players_session - 1 > 3 else 1
 
         for p_opponent in self.players_session_list:
             if p_opponent.id == self.human_player_id:
