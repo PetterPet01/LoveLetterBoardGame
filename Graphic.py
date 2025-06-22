@@ -548,7 +548,7 @@ class LoveLetterGame(BoxLayout):
         options_layout = GridLayout(cols=4, spacing="10dp", size_hint_y=None)
         options_layout.bind(minimum_height=options_layout.setter('height'))
         
-        for i in range(2, 9):
+        for i in range(2, 5):
             btn = Button(
                 text=str(i), 
                 size_hint_y=None, 
@@ -1546,8 +1546,8 @@ class LoveLetterGame(BoxLayout):
                 font_size=20,
                 bold=True
             )
-            btn.bind(on_press=lambda inst, ap=acting_player_obj, tp=target_player_obj, v=int(inst.text):
-                (self.dismiss_active_popup(), continuation_callback_in_gameround(ap, tp, v)))
+            btn.bind(on_press=lambda inst, ap=acting_player_obj, tp=target_player_obj:
+                (self.dismiss_active_popup(), continuation_callback_in_gameround(ap, tp, int(inst.text))))
             options_grid.add_widget(btn)
         
         popup_layout.add_widget(options_grid)
