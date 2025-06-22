@@ -1,8 +1,10 @@
+# main.py with enhanced UI
 
 import os
 import random
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.image import Image
 from kivy.uix.button import Button
@@ -708,12 +710,13 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
         self.clear_widgets()
         
         # Top section with scores and game log
-        top_section = BoxLayout(size_hint_y=0.25, orientation='vertical', spacing=5)
+        top_section = BoxLayout(size_hint_y=0.17, orientation='vertical', spacing=5)
         
         # Info bar with improved styling
-        info_bar = BoxLayout(size_hint_y=None, height=40, padding=5)
+        info_bar = BoxLayout(size_hint_y=None, height=40, padding=[10, 5])
         with info_bar.canvas.before:
-            Color(0.2, 0.3, 0.5, 0.8)
+            # Gradient màu đẹp hơn
+            Color(0.25, 0.35, 0.55, 0.85)
             RoundedRectangle(pos=info_bar.pos, size=info_bar.size, radius=[10,])
         info_bar.bind(pos=self._update_info_bar_bg, size=self._update_info_bar_bg)
             
@@ -722,7 +725,9 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
             size_hint_x=0.7, 
             halign='left', 
             valign='middle', 
-            font_size=16
+            font_size=16,
+            bold=True,
+            color=(0.95, 0.9, 0.7, 1)  # Màu vàng gold cho điểm số
         )
         self.score_label.bind(size=self.score_label.setter('text_size'))
         
@@ -731,9 +736,11 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
             size_hint_x=0.3, 
             halign='right', 
             valign='middle', 
-            color=(1, 0.8, 0.2, 1),
-            font_size=16
+            color=(1, 0.85, 0.3, 1),  # Màu vàng sáng hơn
+            font_size=17,
+            bold=True
         )
+        
         self.turn_label.bind(size=self.turn_label.setter('text_size'))
         
         info_bar.add_widget(self.score_label)
@@ -741,9 +748,10 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
         top_section.add_widget(info_bar)
         
         # Game log with improved styling
-        log_container = BoxLayout(size_hint_y=1, padding=5)
+        log_container = BoxLayout(size_hint_y=1, padding=[10, 5])
         with log_container.canvas.before:
-            Color(0.1, 0.1, 0.2, 0.7)
+            # Màu tối hơn và đẹp hơn
+            Color(0.08, 0.08, 0.15, 0.8)
             RoundedRectangle(pos=log_container.pos, size=log_container.size, radius=[10,])
         log_container.bind(pos=self._update_log_container_bg, size=self._update_log_container_bg)
         
@@ -753,9 +761,10 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
             size_hint_y=None, 
             halign='left', 
             valign='top',
-            color=(0.9, 0.9, 0.9, 1),
+            color=(0.95, 0.95, 0.98, 1),  # Màu sáng hơn
             font_size=14,
-            padding=(10, 10)
+            padding=(15, 10),  # Padding lớn hơn
+            font_name='Roboto'  # Sử dụng font Roboto nếu có
         )
         self.message_label.bind(texture_size=self.message_label.setter('size'))
         log_scroll_view.add_widget(self.message_label)
@@ -767,51 +776,88 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
         game_area = BoxLayout(orientation='vertical', spacing=15, size_hint_y=0.7)
         
         # Opponents area with title
-        opponents_header = BoxLayout(size_hint_y=None, height=30)
+        opponents_header = BoxLayout(size_hint_y=None, height=35, padding=[10, 0])
+        with opponents_header.canvas.before:
+            Color(0.2, 0.2, 0.35, 0.8)  # Màu nền tối
+            RoundedRectangle(pos=opponents_header.pos, size=opponents_header.size, radius=[10, 10, 0, 0])
+        opponents_header.bind(pos=self._update_opponents_header_bg, size=self._update_opponents_header_bg)
+
+        title_icon = BoxLayout(size_hint_x=0.08)  # Thêm không gian cho icon (nếu muốn)
+        opponents_header.add_widget(title_icon)
+
         opponents_header.add_widget(StyledLabel(
             text="Opponents", 
+            size_hint_x=0.92,
             size_hint_y=None, 
-            height=30, 
+            height=35, 
             font_size=18,
-            color=(0.9, 0.7, 0.3, 1)
+            bold=True,
+            color=(0.95, 0.8, 0.4, 1)  # Màu vàng sáng hơn
         ))
         game_area.add_widget(opponents_header)
         
         # Improved opponents display
-        self.opponents_area_scrollview = ScrollView(size_hint=(1, 0.4))
+        opponents_container = BoxLayout(size_hint_y=0.4, padding=[5, 0, 5, 10])
+        with opponents_container.canvas.before:
+            Color(0.12, 0.12, 0.22, 0.8)  # Màu nền tối hơn
+            self.opponents_bg = RoundedRectangle(pos=opponents_container.pos, size=opponents_container.size, radius=[0, 0, 10, 10])
+        opponents_container.bind(pos=self._update_opponents_container_bg, size=self._update_opponents_container_bg)
+
+        self.opponents_area_scrollview = ScrollView(size_hint=(1, 1))
         self.opponents_grid = GridLayout(
             cols=max(1, min(4, self.num_players_session - 1) if self.num_players_session > 1 else 1),
             size_hint_x=None if self.num_players_session - 1 > 3 else 1, 
             size_hint_y=None,
-            spacing=10,
-            padding=5
+            spacing=15,  # Tăng khoảng cách giữa các đối thủ
+            padding=[10, 10]  # Thêm padding
         )
         self.opponents_grid.bind(minimum_width=self.opponents_grid.setter('width'))
         self.opponents_grid.bind(minimum_height=self.opponents_grid.setter('height'))
         self.opponents_area_scrollview.add_widget(self.opponents_grid)
-        game_area.add_widget(self.opponents_area_scrollview)
+        opponents_container.add_widget(self.opponents_area_scrollview)
+        game_area.add_widget(opponents_container)
         
         # Deck area with improved styling
-        deck_container = BoxLayout(size_hint_y=0.2, spacing=15, padding=5)
+        deck_container = BoxLayout(size_hint_y=0.18, spacing=15, padding=[15, 10])
         with deck_container.canvas.before:
-            Color(0.2, 0.25, 0.3, 0.6)
-            RoundedRectangle(pos=deck_container.pos, size=deck_container.size, radius=[10,])
+            Color(0.13, 0.17, 0.25, 0.7)  # Màu tối hơn
+            RoundedRectangle(pos=deck_container.pos, size=deck_container.size, radius=[15,])
         deck_container.bind(pos=self._update_deck_container_bg, size=self._update_deck_container_bg)
         
         # Deck display with shadow effect
         deck_display = BoxLayout(orientation='vertical', size_hint_x=0.3)
+        
+        deck_frame = RelativeLayout(size_hint=(1, 1))
+        
+        for i in range(3):  # 3 lớp bài phía dưới
+            offset = 1.5 * (i + 1)
+            shadow_card = Image(
+                source=CARD_BACK_IMAGE,
+                allow_stretch=True,
+                keep_ratio=True,
+                size_hint=(0.96, 0.96),
+                pos_hint={'center_x': 0.5 - 0.01 * offset, 'center_y': 0.5 - 0.01 * offset},
+                opacity=0.6 - 0.15*i  # Mỗi lớp mờ dần
+            )
+            deck_frame.add_widget(shadow_card)
+        
         self.deck_image = Image(
             source=CARD_BACK_IMAGE, 
             allow_stretch=True,
-            keep_ratio=True
+            keep_ratio=True,
+            size_hint=(0.96, 0.96),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5}
         )
-        deck_display.add_widget(self.deck_image)
         
-        deck_info = BoxLayout(orientation='vertical', size_hint_x=0.7)
+        deck_frame.add_widget(self.deck_image)
+        deck_display.add_widget(deck_frame)
+        
+        deck_info = BoxLayout(orientation='vertical', size_hint_x=0.7, padding=[5, 0, 0, 0])
         self.deck_count_label = StyledLabel(
-            text="Deck: 0", 
-            font_size=18,
-            color=(0.9, 0.8, 0.5, 1)
+            text="Cards Remaining: 0", 
+            font_size=20,  # Tăng kích thước
+            bold=True,
+            color=(0.95, 0.9, 0.6, 1)  # Màu vàng đẹp hơn
         )
         deck_info.add_widget(self.deck_count_label)
         
@@ -822,23 +868,33 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
         # Player hand area with improved styling
         self.human_player_display_wrapper = BoxLayout(orientation='vertical', size_hint_y=0.4, spacing=10)
         
-        player_header = BoxLayout(size_hint_y=None, height=30)
+        player_header = BoxLayout(size_hint_y=None, height=35, padding=[10, 0])
+        with player_header.canvas.before:
+            Color(0.15, 0.3, 0.25, 0.8)  # Màu xanh lục đậm
+            RoundedRectangle(pos=player_header.pos, size=player_header.size, radius=[10, 10, 0, 0])
+        player_header.bind(pos=self._update_player_header_bg, size=self._update_player_header_bg)
+
+        player_icon = BoxLayout(size_hint_x=0.08)  # Không gian cho icon (tương lai)
+        player_header.add_widget(player_icon)
+
         player_header.add_widget(StyledLabel(
             text="Your Hand (Click to Play)", 
+            size_hint_x=0.92,
             size_hint_y=None, 
-            height=30, 
+            height=35, 
             font_size=18,
-            color=(0.3, 0.8, 0.6, 1)
+            bold=True,
+            color=(0.4, 0.9, 0.7, 1)  # Màu xanh sáng hơn
         ))
         self.human_player_display_wrapper.add_widget(player_header)
         
         player_hand_container = BoxLayout(size_hint_y=0.7)
         with player_hand_container.canvas.before:
-            Color(0.15, 0.25, 0.2, 0.6)
-            RoundedRectangle(pos=player_hand_container.pos, size=player_hand_container.size, radius=[10,])
+            Color(0.08, 0.2, 0.15, 0.8)  # Màu tối hơn để lá bài nổi bật
+            RoundedRectangle(pos=player_hand_container.pos, size=player_hand_container.size, radius=[0, 0, 10, 10])
         player_hand_container.bind(pos=self._update_player_hand_bg, size=self._update_player_hand_bg)
-        
-        self.player_hand_area = BoxLayout(orientation='horizontal', spacing=20, padding=10)
+
+        self.player_hand_area = BoxLayout(orientation='horizontal', spacing=20, padding=[20, 15])  # Padding lớn hơn
         player_hand_container.add_widget(self.player_hand_area)
         self.human_player_display_wrapper.add_widget(player_hand_container)
         
@@ -853,19 +909,41 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
         self.add_widget(game_area)
 
         # Bottom action button with improved styling
+        button_container = BoxLayout(size_hint_y=None, height=60, padding=[100, 0])
+
+        # Nút đẹp hơn với viền 3D
         self.action_button = Button(
             text="Start New Game Session", 
-            size_hint_y=None, 
-            height=60,
+            size_hint=(1, 0.9),
+            pos_hint={'center_y': 0.5},
             background_color=(0.4, 0.6, 0.9, 1),
-            font_size=18,
-            bold=True
+            font_size=19,
+            bold=True,
+            border=(0, 0, 0, 5)  # Border bottom để tạo hiệu ứng 3D
         )
         self.action_button.bind(on_press=self.on_press_action_button)
-        self.add_widget(self.action_button)
-        
+        button_container.add_widget(self.action_button)
+        self.add_widget(button_container)
+                
         self.update_ui_full()
-    
+        
+    def _update_player_header_bg(self, instance, value):
+        instance.canvas.before.clear()
+        with instance.canvas.before:
+            Color(0.15, 0.3, 0.25, 0.8)
+            RoundedRectangle(pos=instance.pos, size=instance.size, radius=[10, 10, 0, 0])
+            
+    def _update_opponents_container_bg(self, instance, value):
+        if hasattr(self, 'opponents_bg'):
+            self.opponents_bg.pos = instance.pos
+            self.opponents_bg.size = instance.size
+            
+    def _update_opponents_header_bg(self, instance, value):
+        instance.canvas.before.clear()
+        with instance.canvas.before:
+            Color(0.2, 0.2, 0.35, 0.8)
+            RoundedRectangle(pos=instance.pos, size=instance.size, radius=[10, 10, 0, 0])
+            
     def _update_info_bar_bg(self, instance, value):
         instance.canvas.before.clear()
         with instance.canvas.before:
@@ -951,30 +1029,60 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
                 if p_opponent.id == self.human_player_id: continue
 
                 # Create styled opponent display
-                opponent_container = BoxLayout(orientation='vertical', size_hint_y=None, height=200, width=150, padding=5)
+                opponent_container = BoxLayout(
+                    orientation='vertical', 
+                    size_hint_y=None, 
+                    height=210, 
+                    width=160, 
+                    padding=[8, 8, 8, 8]  # Padding đều hơn
+                )
                 
                 # Add background with border and status color
                 with opponent_container.canvas.before:
+                    # Thêm viền sáng
+                    Color(0.3, 0.3, 0.4, 0.9)
+                    RoundedRectangle(
+                        pos=(opponent_container.pos[0]-2, opponent_container.pos[1]-2), 
+                        size=(opponent_container.size[0]+4, opponent_container.size[1]+4), 
+                        radius=[15,]
+                    )
+                    # Nền chính - màu phụ thuộc vào trạng thái
                     if p_opponent.is_eliminated:
                         Color(0.5, 0.1, 0.1, 0.7)  # Red for eliminated
                     elif p_opponent.is_protected:
                         Color(0.2, 0.5, 0.2, 0.7)  # Green for protected
                     else:
-                        Color(0.2, 0.2, 0.3, 0.7)  # Default blue
+                        Color(0.15, 0.15, 0.25, 0.7)  # Màu nền tối hơn cho mặc định
                     RoundedRectangle(pos=opponent_container.pos, size=opponent_container.size, radius=[15,])
                 
                 opponent_container.bind(pos=self._update_opponent_bg, size=self._update_opponent_bg)
                 
                 # Name with token count
                 name_box = BoxLayout(size_hint_y=0.15)
-                token_text = f"{p_opponent.name} {'★' * p_opponent.tokens}"
+                # Thêm nền cho name_box
+                with name_box.canvas.before:
+                    if p_opponent.is_eliminated:
+                        Color(0.4, 0.08, 0.08, 0.9)  # Đỏ tối hơn
+                    elif p_opponent.is_protected:
+                        Color(0.15, 0.4, 0.15, 0.9)  # Xanh tối hơn
+                    else:
+                        Color(0.1, 0.1, 0.2, 0.9)  # Xanh tối mặc định
+                    RoundedRectangle(pos=name_box.pos, size=name_box.size, radius=[10, 10, 0, 0])
+                name_box.bind(pos=self._update_name_box_bg, size=self._update_name_box_bg)
+
+                # Cải thiện hiển thị tên và token
+                token_text = f"{p_opponent.name}"
+                token_stars = " " + ("★" * p_opponent.tokens)
                 status_text = " [E]" if p_opponent.is_eliminated else " [P]" if p_opponent.is_protected else ""
+
                 name_label = StyledLabel(
                     text=token_text + status_text, 
-                    font_size='12sp',
-                    color=(1, 1, 0.8, 1) if not p_opponent.is_eliminated else (1, 0.7, 0.7, 1)
+                    font_size='13sp',
+                    bold=True,
+                    color=(1, 1, 0.85, 1) if not p_opponent.is_eliminated else (1, 0.7, 0.7, 1)
                 )
                 name_box.add_widget(name_label)
+                
                 opponent_container.add_widget(name_box)
                 
                 # Card display
@@ -1054,31 +1162,65 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
                 card_container = BoxLayout(
                     orientation='vertical',
                     size_hint=(1 / len(human_player.hand) if len(human_player.hand) > 0 else 1, 1),
-                    padding=5
+                    padding=[10, 10, 10, 5]  # Padding tốt hơn
                 )
-                
+
+                if is_player_turn_active_ui:
+                    with card_container.canvas.before:
+                        # Bóng đổ nhẹ cho lá bài
+                        Color(0.2, 0.4, 0.3, 0.4)
+                        RoundedRectangle(
+                            pos=(card_container.pos[0]+4, card_container.pos[1]-4), 
+                            size=card_container.size,
+                            radius=[8,]
+                        )
+                        
+                card_frame = BoxLayout(padding=[2, 2, 2, 2])
+                with card_frame.canvas.before:
+                    # Viền cho lá bài
+                    if is_player_turn_active_ui:
+                        Color(0.9, 0.8, 0.3, 0.8)  # Viền vàng cho bài có thể chơi
+                    else:
+                        Color(0.4, 0.4, 0.5, 0.4)  # Viền xám khi không thể chơi
+                    RoundedRectangle(pos=card_frame.pos, size=card_frame.size, radius=[5,])
+                card_frame.bind(pos=lambda inst, val: self._update_card_frame(inst, val), 
+                            size=lambda inst, val: self._update_card_frame(inst, val))
+                                
                 # Card button with shadow effect when active
                 card_button = ImageButton(
                     source=card_obj.image_path,
                     card_info_callback=self.display_card_info_popup,
-                    card_data=card_obj
+                    card_data=card_obj,
+                    size_hint=(0.95, 0.95),
+                    pos_hint={'center_x': 0.5, 'center_y': 0.5}  # Căn giữa lá bài
                 )
+                
                 card_button.card_name = card_obj.name
                 card_button.bind(on_press=self.on_player_card_selected)
                 card_button.disabled = not is_player_turn_active_ui
                 card_button.opacity = 1.0 if is_player_turn_active_ui else 0.7
+                
+                card_frame.add_widget(card_button)
+                card_container.add_widget(card_frame)
                                 
                 # Add card value indicator
-                card_value_box = BoxLayout(size_hint_y=None, height=20)
+                card_info_box = BoxLayout(size_hint_y=None, height=25, padding=[0, 5, 0, 0])
+                # Thêm background cho thông tin lá bài
+                with card_info_box.canvas.before:
+                    Color(0.15, 0.15, 0.2, 0.8)
+                    RoundedRectangle(pos=card_info_box.pos, size=card_info_box.size, radius=[0, 0, 5, 5])
+                card_info_box.bind(pos=self._update_card_info_box, size=self._update_card_info_box)
+
+                # Hiển thị tên và giá trị lá bài đẹp hơn
                 card_value_label = StyledLabel(
                     text=f"{card_obj.name} ({card_obj.value})", 
-                    font_size='12sp',
-                    color=(1, 1, 0.8, 1)
+                    font_size='13sp',
+                    color=(1, 0.92, 0.7, 1),
+                    bold=True
                 )
-                card_value_box.add_widget(card_value_label)
-                
-                card_container.add_widget(card_button)
-                card_container.add_widget(card_value_box)
+                card_info_box.add_widget(card_value_label)
+
+                card_container.add_widget(card_info_box)
                 self.player_hand_area.add_widget(card_container)
 
         # Update player discard display
@@ -1127,7 +1269,32 @@ class LoveLetterGame(BoxLayout):  # Kivy Main Widget
                     discard_container.remove_widget(discard_container.children[0])
                 discard_container.add_widget(self.player_discard_display)
         self.log_message("", permanent=False)
-    
+        
+    def _update_card_info_box(self, instance, value):
+        for child in instance.canvas.before.children:
+            if isinstance(child, RoundedRectangle):
+                child.pos = instance.pos
+                child.size = instance.size
+                
+    def _update_card_frame(self, instance, value):
+        for child in instance.canvas.before.children:
+            if isinstance(child, RoundedRectangle):
+                child.pos = instance.pos
+                child.size = instance.size
+            
+    def _update_name_box_bg(self, instance, value):
+        instance.canvas.before.clear()
+        with instance.canvas.before:
+            # Lấy màu từ parent (opponent_container)
+            if instance.parent:
+                for child in instance.parent.canvas.before.children:
+                    if isinstance(child, Color):
+                        r, g, b, a = child.rgba
+                        # Làm tối hơn một chút
+                        Color(max(0, r*0.8), max(0, g*0.8), max(0, b*0.8), a)
+                        break
+            RoundedRectangle(pos=instance.pos, size=instance.size, radius=[10, 10, 0, 0])
+            
     def _update_opponent_bg(self, instance, value):
         if hasattr(instance, 'canvas') and hasattr(instance, 'canvas.before'):
             for child in instance.canvas.before.children:
