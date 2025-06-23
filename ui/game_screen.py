@@ -1,0 +1,1475 @@
+# file: game_screen.py
+
+import os
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.relativelayout import RelativeLayout
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.image import Image
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.popup import Popup
+from kivy.uix.scrollview import ScrollView
+from kivy.clock import Clock
+from kivy.graphics import Color, Rectangle, RoundedRectangle
+from kivy.animation import Animation
+from kivy.metrics import dp
+from kivy.uix.widget import Widget
+
+# Imports từ các file cục bộ
+
+from logic.player import Player
+from logic.deck import Deck
+from logic.game_round import GameRound
+from logic.card import Card
+from logic.constants import CARD_PROTOTYPES, CARDS_DATA_RAW
+
+from .constants import (
+    CARD_RULES_IMAGE, EMPTY_CARD_IMAGE, CARD_BACK_IMAGE, ELIMINATED_IMAGE,
+    CARD_VALUE_COLORS, VICTORY_IMAGE, DEFEAT_IMAGE
+)
+from ui.ui_components import StyledLabel, ImageButton, TurnNotificationPopup
+
+class LoveLetterGame(BoxLayout):
+    def __init__(self, **kwargs):
+        self.game_log = ["Chào mừng đến với Thư Tình (Kivy)!"]
+        self.num_players_session = 0
+        self.players_session_list = []
+        self.human_player_id = 0
+        self.current_round_manager = None
+        self.tokens_to_win_session = 0
+        self.game_over_session_flag = True
+        self.active_popup = None
+        self.waiting_for_input = False
+        self.opponent_widgets_map = {}
+        self.active_notification = None
+        self.animated_widget_details = {}
+        super().__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.padding = 15
+        self.spacing = 10
+        with self.canvas.before:
+            Color(0.18, 0.07, 0.07, 1)
+            self.bg = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self._update_rect, size=self._update_rect)
+        Clock.schedule_once(self._delayed_setup, 1)
+
+    def show_turn_notification(self, title, details, stay_duration=2.5):
+        """
+        Displays a non-blocking, animated notification on top of the game screen.
+        """
+        container = self.parent
+        if not container:
+            print("Warning: Cannot show notification, widget has no parent yet.")
+            return
+
+        if self.active_notification and self.active_notification.parent:
+            Animation.cancel_all(self.active_notification)
+            container.remove_widget(self.active_notification)
+            self.active_notification = None
+
+        notification = TurnNotificationPopup(title_text=title, detail_text=details)
+        notification.pos_hint = {'center_x': 0.5, 'center_y': 0.65}
+
+        container.add_widget(notification)
+        self.active_notification = notification
+
+        anim = (
+                Animation(opacity=1, duration=0.4) +
+                Animation(duration=stay_duration) +
+                Animation(opacity=0, duration=0.5)
+        )
+
+        def on_complete_animation(*args):
+            if notification.parent:
+                notification.parent.remove_widget(notification)
+            if self.active_notification == notification:
+                self.active_notification = None
+
+        anim.bind(on_complete=on_complete_animation)
+        anim.start(notification)
+
+    def show_card_rules_popup(self, instance):
+        """Displays a popup with the card rules image, scaled to fit the popup height and centered horizontally."""
+        self.dismiss_active_popup()
+        if not os.path.exists(CARD_RULES_IMAGE):
+            self.log_message(f"LỖI: Không tìm thấy ảnh luật chơi tại {CARD_RULES_IMAGE}")
+            return
+
+        popup_layout = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
+
+        title_label = StyledLabel(
+            text="Luật & Hiệu ứng các lá bài",
+            font_size='22sp',
+            color=(1, 0.9, 0.4, 1),
+            size_hint_y=None,
+            height=dp(40)
+        )
+        popup_layout.add_widget(title_label)
+
+        scroll_view = ScrollView(size_hint=(1, 1), do_scroll_x=True, do_scroll_y=False)
+
+        rules_image = Image(
+            source=CARD_RULES_IMAGE,
+            size_hint=(None, 1),
+            allow_stretch=True,
+        )
+
+        def set_image_width(instance, height):
+            if instance.image_ratio > 0:
+                instance.width = height * instance.image_ratio
+
+        rules_image.bind(height=set_image_width)
+
+        scroll_view.add_widget(rules_image)
+        popup_layout.add_widget(scroll_view)
+
+        close_btn = Button(
+            text="Đóng",
+            size_hint=(1, None),
+            height=dp(50),
+            background_color=(0.7, 0.2, 0.2, 1),
+            font_size='18sp',
+            bold=True
+        )
+        close_btn.bind(on_press=lambda x: self.dismiss_active_popup())
+        popup_layout.add_widget(close_btn)
+
+        self.active_popup = Popup(
+            title="Sổ tay hướng dẫn",
+            title_size='0sp',
+            separator_height=0,
+            content=popup_layout,
+            size_hint=(0.95, 0.95),
+            auto_dismiss=True,
+            background_color=(0.18, 0.07, 0.07, 0.98)
+        )
+
+        def center_scroll_on_open(popup_instance):
+            scroll_view.scroll_x = 0.5
+
+        self.active_popup.bind(on_open=center_scroll_on_open)
+        self.active_popup.open()
+
+    def show_victory_defeat_effect(self, is_victory=True):
+        from kivy.uix.image import Image
+        from kivy.animation import Animation
+        img_path = VICTORY_IMAGE if is_victory else DEFEAT_IMAGE
+        if not os.path.exists(img_path):
+            return
+        effect_img = Image(
+            source=img_path,
+            size_hint=(None, None),
+            size=(min(self.width * 0.7, 700), min(self.height * 0.35, 350)),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5},
+            opacity=0
+        )
+
+        def update_size_pos(*_):
+            effect_img.size = (min(self.width * 0.7, 700), min(self.height * 0.35, 350))
+            effect_img.pos_hint = {'center_x': 0.5, 'center_y': 0.5}
+
+        self.bind(size=update_size_pos)
+        update_size_pos()
+        self.add_widget(effect_img)
+        anim = Animation(opacity=1, duration=0.2) + Animation(opacity=1, duration=1.6) + Animation(opacity=0,
+                                                                                                   duration=0.2)
+
+        def remove_img(*_):
+            if effect_img.parent:
+                self.remove_widget(effect_img)
+
+        anim.bind(on_complete=remove_img)
+        anim.start(effect_img)
+
+    def create_selection_button(self, text, on_press_callback, is_disabled=False):
+        btn = Button(
+            text=text,
+            size_hint_y=None,
+            height=54,
+            background_normal='',
+            background_color=(0.25, 0.08, 0.08, 0.92) if not is_disabled else (0.2, 0.2, 0.2, 0.7),
+            color=(1, 0.92, 0.7, 1) if not is_disabled else (0.7, 0.7, 0.7, 1),
+            font_size=20,
+            bold=True,
+            disabled=is_disabled
+        )
+        with btn.canvas.before:
+            Color(0.9, 0.8, 0.3, 0.22 if not is_disabled else 0.08)
+            border_rect = RoundedRectangle(pos=btn.pos, size=btn.size, radius=[14])
+
+        def update_border_rect(inst, val, rect=border_rect):
+            rect.pos = inst.pos
+            rect.size = inst.size
+
+        btn.bind(pos=update_border_rect, size=update_border_rect)
+
+        def on_press(inst):
+            if not is_disabled:
+                inst.background_color = (0.4, 0.18, 0.18, 1)
+
+        def on_release(inst):
+            if not is_disabled:
+                inst.background_color = (0.25, 0.08, 0.08, 0.92)
+
+        btn.bind(on_press=on_press, on_release=on_release)
+        btn.bind(on_release=on_press_callback)
+        return btn
+
+    def _update_rect(self, instance, value):
+        if hasattr(instance, 'bg'):
+            instance.bg.pos = instance.pos
+            instance.bg.size = instance.size
+        if hasattr(instance, 'canvas') and hasattr(instance.canvas, 'before'):
+            for instruction in instance.canvas.before.children:
+                if isinstance(instruction, RoundedRectangle) or isinstance(instruction, Rectangle):
+                    instruction.pos = instance.pos
+                    instruction.size = instance.size
+
+    def _delayed_setup(self, dt):
+        self._load_card_prototypes_and_images()
+        self.setup_ui_placeholders()
+
+    def initialize_game_setup(self):
+        self.prompt_player_count()
+
+    def cleanup_leftover_rectangles(self):
+        self._clear_animations_and_proceed(None)
+        widgets_to_check = [self] + self.children[:]
+        if hasattr(self, 'opponents_grid'):
+            widgets_to_check.append(self.opponents_grid)
+            widgets_to_check.extend(self.opponents_grid.children[:])
+        for widget in widgets_to_check:
+            if hasattr(widget, 'canvas') and hasattr(widget.canvas, 'before') and hasattr(widget.canvas.before,
+                                                                                          'children'):
+                instructions_to_remove = [
+                    instruction for instruction in widget.canvas.before.children
+                    if (isinstance(instruction, Rectangle) or isinstance(instruction, RoundedRectangle))
+                       and not hasattr(widget, '_update_rect')
+                ]
+                for instruction in instructions_to_remove:
+                    widget.canvas.before.remove(instruction)
+
+    def display_card_info_popup(self, card_data):
+        self.dismiss_active_popup()
+        card_value = card_data.value if hasattr(card_data, 'value') else 0
+        card_color = CARD_VALUE_COLORS.get(card_value, (0.5, 0.5, 0.5))
+        popup_layout = BoxLayout(orientation='vertical', spacing=0, padding=0)
+        header = BoxLayout(orientation='vertical', size_hint_y=0.15, padding=[15, 5])
+        with header.canvas.before:
+            Color(*card_color, 0.9)
+            header_bg = RoundedRectangle(radius=[5, 5, 0, 0])
+        header.bind(pos=lambda inst, val: self._update_rect(header, val),
+                    size=lambda inst, val: self._update_rect(header, val))
+        name_row = BoxLayout(orientation='horizontal')
+        name_box = BoxLayout(orientation='vertical', size_hint_x=0.7)
+        card_name_label = StyledLabel(
+            text=f"{card_data.name}",
+            font_size=24,
+            bold=True,
+            color=(1, 1, 1, 1),
+            outline_width=2,
+            outline_color=(0, 0, 0, 0.5),
+            halign='left'
+        )
+        name_box.add_widget(card_name_label)
+        if hasattr(card_data, 'vietnamese_name'):
+            viet_name_label = StyledLabel(
+                text=f"({card_data.vietnamese_name})",
+                font_size=16,
+                italic=True,
+                color=(1, 1, 1, 0.9),
+                halign='left'
+            )
+            name_box.add_widget(viet_name_label)
+        value_box = BoxLayout(orientation='vertical', size_hint_x=0.3)
+        value_label = StyledLabel(
+            text=f"Giá trị: {card_data.value}",
+            font_size=20,
+            bold=True,
+            color=(1, 1, 1, 1),
+            outline_width=1,
+            outline_color=(0, 0, 0, 0.5)
+        )
+        value_box.add_widget(value_label)
+        name_row.add_widget(name_box)
+        name_row.add_widget(value_box)
+        header.add_widget(name_row)
+        popup_layout.add_widget(header)
+        content = BoxLayout(orientation='horizontal', padding=15, spacing=10)
+        image_frame = BoxLayout(orientation='vertical', size_hint_x=0.4, padding=5)
+        with image_frame.canvas.before:
+            Color(0.15, 0.15, 0.2, 0.8)
+            image_bg = RoundedRectangle(radius=[5])
+        image_frame.bind(pos=lambda inst, val: self._update_rect(image_frame, val),
+                         size=lambda inst, val: self._update_rect(image_frame, val))
+        card_image = Image(
+            source=card_data.image_path,
+            allow_stretch=True,
+            keep_ratio=True,
+            size_hint=(0.9, 0.9),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5}
+        )
+        image_frame.add_widget(card_image)
+        content.add_widget(image_frame)
+        effect_panel = BoxLayout(orientation='vertical',
+                                 size_hint_x=0.6,
+                                 spacing=10)
+        effect_title = StyledLabel(
+            text="Hiệu ứng:",
+            font_size=22,
+            bold=True,
+            color=(0.9, 0.8, 0.3, 1),
+            size_hint_y=None,
+            height=40,
+            halign='center'
+        )
+        effect_title.bind(size=effect_title.setter('text_size'))
+        effect_panel.add_widget(effect_title)
+        effect_box = BoxLayout(size_hint_y=1, padding=10)
+        with effect_box.canvas.before:
+            Color(0.15, 0.15, 0.2, 0.6)
+            RoundedRectangle(pos=effect_box.pos, size=effect_box.size, radius=[5])
+        effect_box.bind(pos=lambda inst, val: self._update_rect(effect_box, val),
+                        size=lambda inst, val: self._update_rect(effect_box, val))
+        effect_scroll = ScrollView(do_scroll_x=False)
+        effect_text = StyledLabel(
+            text=card_data.description,
+            font_size=20,
+            size_hint_y=None,
+            halign='center',
+            valign='middle',
+            color=(0.95, 0.95, 1, 1),
+            padding=(15, 15),
+            markup=True
+        )
+        effect_text.bind(width=lambda *x: effect_text.setter('text_size')(effect_text, (effect_text.width, None)))
+        effect_text.bind(texture_size=effect_text.setter('size'))
+        effect_scroll.add_widget(effect_text)
+        effect_box.add_widget(effect_scroll)
+        effect_panel.add_widget(effect_box)
+        content.add_widget(effect_panel)
+        popup_layout.add_widget(content)
+        footer = BoxLayout(orientation='horizontal', size_hint_y=0.1, padding=[15, 10])
+        footer.add_widget(Widget(size_hint_x=0.35))
+        close_btn = Button(
+            text="Đóng",
+            size_hint=(0.3, 0.8),
+            background_color=(*card_color, 1.0),
+            font_size=18,
+            bold=True,
+            pos_hint={'center_y': 0.5}
+        )
+        close_btn.bind(on_press=lambda x: self.dismiss_active_popup())
+        footer.add_widget(close_btn)
+        footer.add_widget(Widget(size_hint_x=0.35))
+        popup_layout.add_widget(footer)
+        self.active_popup = Popup(
+            title="Thông tin lá bài",
+            content=popup_layout,
+            size_hint=(0.85, 0.8),
+            title_color=(0.9, 0.9, 0.7, 1),
+            title_size='20sp',
+            title_align='center',
+            separator_color=card_color,
+            auto_dismiss=True
+        )
+        self.active_popup.open()
+
+    def _load_card_prototypes_and_images(self):
+        global CARD_PROTOTYPES
+        CARD_PROTOTYPES.clear()
+        missing_card_back = not os.path.exists(CARD_BACK_IMAGE)
+        if missing_card_back:
+            self.log_message(f"LỖI NGHIÊM TRỌNG: Không tìm thấy ảnh mặt sau lá bài tại {CARD_BACK_IMAGE}",
+                             permanent=True)
+        for eng_name, data in CARDS_DATA_RAW.items():
+            viet_name = data['vietnamese_name']
+            path_jpg = os.path.join("assets/cards", f"{viet_name}.jpg")
+            path_png = os.path.join("assets/cards", f"{viet_name}.png")
+            actual_path = next((p for p in [path_jpg, path_png] if os.path.exists(p)), None)
+            if not actual_path:
+                self.log_message(f"Cảnh báo: Không tìm thấy ảnh cho '{eng_name}' ({viet_name}). Sử dụng ảnh mặt sau.",
+                                 permanent=True)
+                actual_path = CARD_BACK_IMAGE if not missing_card_back else ""
+            CARD_PROTOTYPES[eng_name] = Card(
+                name=eng_name,
+                value=data['value'],
+                description=data['description'],
+                image_path=actual_path,
+                vietnamese_name=viet_name,
+                count_classic=data['count_classic'],
+                count_large=data['count_large']
+            )
+        self.log_message(f"Đã tải {len(CARD_PROTOTYPES)} loại lá bài.", permanent=True)
+
+    def setup_ui_placeholders(self):
+        self.clear_widgets()
+        welcome_layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
+        title_label = StyledLabel(
+            text="Board Game Thư Tình",
+            font_size=32,
+            color=(0.9, 0.7, 0.8, 1),
+            size_hint_y=0.3
+        )
+        welcome_layout.add_widget(title_label)
+        image_box = BoxLayout(size_hint_y=0.4)
+        if os.path.exists(CARD_BACK_IMAGE):
+            welcome_image = Image(source=CARD_BACK_IMAGE, size_hint_max_x=0.7)
+            welcome_image.pos_hint = {'center_x': 0.5}
+            image_box.add_widget(welcome_image)
+        welcome_layout.add_widget(image_box)
+        waiting_label = StyledLabel(
+            text="Đang chờ bắt đầu trò chơi...",
+            font_size=24,
+            size_hint_y=0.3
+        )
+        welcome_layout.add_widget(waiting_label)
+        self.add_widget(welcome_layout)
+
+    def prompt_player_count(self):
+        self.game_log = ["Chào mừng đến với Thư Tình (Kivy)!", "Vui lòng chọn số người chơi (2-4)."]
+        if hasattr(self, 'message_label'):
+            self.log_message("", permanent=False)
+        popup_layout = BoxLayout(orientation='vertical', spacing=20, padding=[30, 30, 30, 30])
+        title_label = StyledLabel(
+            text="Chọn số người chơi",
+            font_size=28,
+            bold=True,
+            color=(1, 0.92, 0.7, 1),
+            size_hint_y=None,
+            height=50,
+            halign='center'
+        )
+        title_label.bind(size=title_label.setter('text_size'))
+        popup_layout.add_widget(title_label)
+        subtitle = StyledLabel(
+            text="(2 - 4 người, chỉ bản cơ bản)",
+            font_size=18,
+            color=(0.9, 0.9, 1, 0.8),
+            size_hint_y=None,
+            height=30,
+            halign='center'
+        )
+        subtitle.bind(size=subtitle.setter('text_size'))
+        popup_layout.add_widget(subtitle)
+        options_layout = GridLayout(cols=3, spacing=20, size_hint_y=None, height=70)
+        for i in range(2, 5):
+            btn = Button(
+                text=str(i),
+                size_hint=(1, None),
+                height=60,
+                background_normal='',
+                background_color=(0.13, 0.16, 0.28, 0.95),
+                color=(1, 0.95, 0.7, 1),
+                font_size=26,
+                bold=True
+            )
+            with btn.canvas.before:
+                Color(0.9, 0.8, 0.3, 0.18)
+                border_rect = RoundedRectangle(pos=btn.pos, size=btn.size, radius=[18])
+
+            def update_border_rect(inst, val, rect=border_rect):
+                rect.pos = inst.pos
+                rect.size = inst.size
+
+            btn.bind(pos=update_border_rect, size=update_border_rect)
+            btn.player_count = i
+            btn.bind(on_press=self.initialize_game_with_player_count)
+            options_layout.add_widget(btn)
+        popup_layout.add_widget(options_layout)
+
+        class DarkPopup(Popup):
+            pass
+
+        self.active_popup = DarkPopup(
+            title="Thư Tình - Chọn số người chơi",
+            content=popup_layout,
+            size_hint=(0.55, 0.38),
+            auto_dismiss=False,
+            title_color=(1, 0.9, 0.8, 1),
+            title_size='22sp',
+            title_align='center',
+            separator_color=(0.8, 0.7, 0.3, 0.7),
+            background_color=(0.09, 0.09, 0.13, 0.98)
+        )
+        self.active_popup.open()
+
+    def initialize_game_with_player_count(self, instance):
+        if self.active_popup:
+            self.active_popup.dismiss()
+            self.active_popup = None
+        self.num_players_session = instance.player_count
+        self.log_message(f"Số người chơi được đặt là: {self.num_players_session}")
+        if self.num_players_session == 2:
+            self.tokens_to_win_session = 7
+        elif self.num_players_session == 3:
+            self.tokens_to_win_session = 5
+        else:
+            self.tokens_to_win_session = 4
+        self.log_message(f"Số tín vật cần để chiến thắng: {self.tokens_to_win_session}")
+        self.players_session_list = [Player(id_num=0, name="Người chơi 1 (Bạn)")]
+        self.human_player_id = self.players_session_list[0].id
+        for i in range(1, self.num_players_session):
+            self.players_session_list.append(Player(id_num=i, name=f"Máy {i}", is_cpu=True))
+        self.setup_main_ui()
+        self.start_new_game_session()
+
+    def setup_main_ui(self):
+        self.clear_widgets()
+        # Adjusted main layout proportions to fill space left by the action button
+        top_section = BoxLayout(size_hint_y=0.17, orientation='vertical', spacing=5)
+        game_area = BoxLayout(orientation='vertical', spacing=15, size_hint_y=0.83)  # Increased from 0.7
+
+        # --- Top Section (Log, Scores) ---
+        info_bar = BoxLayout(size_hint_y=None, height=40, padding=[10, 5], spacing=10)
+        with info_bar.canvas.before:
+            Color(0.32, 0.13, 0.13, 0.92)
+            info_bar_bg = RoundedRectangle(radius=[10, ])
+        info_bar.bind(pos=lambda inst, val: self._update_rect(info_bar, val),
+                      size=lambda inst, val: self._update_rect(info_bar, val))
+        self.score_label = StyledLabel(
+            text="Điểm số:",
+            size_hint_x=0.6,
+            halign='left',
+            valign='middle',
+            font_size=16,
+            bold=True,
+            color=(0.95, 0.9, 0.7, 1)
+        )
+        self.score_label.bind(size=self.score_label.setter('text_size'))
+
+        rules_btn = Button(
+            text="Luật chơi",
+            size_hint_x=0.15,
+            background_normal='',
+            background_color=(0.4, 0.45, 0.6, 0.9),
+            font_size=15,
+            bold=True,
+        )
+        rules_btn.bind(on_press=self.show_card_rules_popup)
+
+        self.turn_label = StyledLabel(
+            text="Kết thúc",
+            size_hint_x=0.25,
+            halign='right',
+            valign='middle',
+            color=(1, 0.85, 0.3, 1),
+            font_size=17,
+            bold=True
+        )
+        self.turn_label.bind(size=self.turn_label.setter('text_size'))
+
+        info_bar.add_widget(self.score_label)
+        info_bar.add_widget(rules_btn)
+        info_bar.add_widget(self.turn_label)
+        top_section.add_widget(info_bar)
+
+        log_container = BoxLayout(size_hint_y=1, padding=[10, 5])
+        with log_container.canvas.before:
+            Color(0.22, 0.09, 0.09, 0.85)
+            log_container_bg = RoundedRectangle(radius=[10, ])
+        log_container.bind(pos=lambda inst, val: self._update_rect(log_container, val),
+                           size=lambda inst, val: self._update_rect(log_container, val))
+        log_scroll_view = ScrollView(size_hint_y=1)
+        self.message_label = Label(
+            text="\n".join(self.game_log),
+            size_hint_y=None,
+            halign='left',
+            valign='top',
+            color=(0.95, 0.95, 0.98, 1),
+            font_size=14,
+            padding=(15, 10),
+            font_name='Roboto'
+        )
+        self.message_label.bind(texture_size=self.message_label.setter('size'))
+        log_scroll_view.add_widget(self.message_label)
+        log_container.add_widget(log_scroll_view)
+        top_section.add_widget(log_container)
+        self.add_widget(top_section)
+
+        # --- Game Area (Players, Deck, Hand) ---
+        opponents_header = BoxLayout(size_hint_y=None, height=35, padding=[10, 0])
+        with opponents_header.canvas.before:
+            Color(0.32, 0.13, 0.13, 0.92)
+            opponents_header_bg = RoundedRectangle(pos=opponents_header.pos, size=opponents_header.size,
+                                                   radius=[10, 10, 0, 0])
+        opponents_header.bind(pos=lambda inst, val: self._update_rect(opponents_header, val),
+                              size=lambda inst, val: self._update_rect(opponents_header, val))
+        opponents_header.add_widget(Widget(size_hint_x=0.08))
+        opponents_header.add_widget(StyledLabel(
+            text="Đối thủ",
+            size_hint_x=0.92,
+            size_hint_y=None,
+            height=35,
+            font_size=18,
+            bold=True,
+            color=(0.95, 0.8, 0.4, 1)
+        ))
+        game_area.add_widget(opponents_header)
+        opponents_container = BoxLayout(size_hint_y=0.4, padding=[5, 0, 5, 10])
+        with opponents_container.canvas.before:
+            Color(0.18, 0.07, 0.07, 0.92)
+            self.opponents_bg = RoundedRectangle(radius=[0, 0, 10, 10])
+        opponents_container.bind(pos=lambda inst, val: self._update_rect(opponents_container, val),
+                                 size=lambda inst, val: self._update_rect(opponents_container, val))
+        self.opponents_area_scrollview = ScrollView(size_hint=(1, 1))
+        self.opponents_grid = GridLayout(
+            cols=min(3, self.num_players_session - 1),
+            size_hint_x=None if self.num_players_session - 1 > 3 else 1,
+            size_hint_y=None,
+            spacing=15,
+            padding=[10, 10]
+        )
+        self.opponents_grid.bind(minimum_width=self.opponents_grid.setter('width'))
+        self.opponents_grid.bind(minimum_height=self.opponents_grid.setter('height'))
+        self.opponents_area_scrollview.add_widget(self.opponents_grid)
+        opponents_container.add_widget(self.opponents_area_scrollview)
+        game_area.add_widget(opponents_container)
+        self.human_player_display_wrapper = BoxLayout(orientation='vertical', size_hint_y=0.4, spacing=10)
+        player_header = BoxLayout(size_hint_y=None, height=35, padding=[10, 0])
+        with player_header.canvas.before:
+            Color(0.32, 0.13, 0.13, 0.92)
+            player_header_bg = RoundedRectangle(radius=[10, 10, 0, 0])
+        player_header.bind(pos=lambda inst, val: self._update_rect(player_header, val),
+                           size=lambda inst, val: self._update_rect(player_header, val))
+        player_header.add_widget(Widget(size_hint_x=0.08))
+        player_header.add_widget(StyledLabel(
+            text="Bài của bạn (Nhấn để chơi)",
+            size_hint_x=0.92,
+            size_hint_y=None,
+            height=35,
+            font_size=18,
+            bold=True,
+            color=(0.4, 0.9, 0.7, 1)
+        ))
+        self.human_player_display_wrapper.add_widget(player_header)
+        player_hand_container = BoxLayout(size_hint_y=0.7)
+        with player_hand_container.canvas.before:
+            Color(0.18, 0.07, 0.07, 0.92)
+            player_hand_bg = RoundedRectangle(radius=[0, 0, 10, 10])
+        player_hand_container.bind(pos=lambda inst, val: self._update_rect(player_hand_container, val),
+                                   size=lambda inst, val: self._update_rect(player_hand_container, val))
+        self.player_hand_area = BoxLayout(orientation='horizontal', spacing=20, padding=[20, 15])
+        player_hand_container.add_widget(self.player_hand_area)
+        self.human_player_display_wrapper.add_widget(player_hand_container)
+        game_area.add_widget(self.human_player_display_wrapper)
+        center_game_area = BoxLayout(size_hint_y=0.2, spacing=10, padding=[10, 5])
+        left_area = BoxLayout(orientation='vertical', size_hint_x=0.25)
+        left_area.add_widget(StyledLabel(
+            text="Chồng bài",
+            size_hint_y=0.2,
+            font_size=16,
+            color=(0.9, 0.9, 0.7, 1)
+        ))
+        deck_display = RelativeLayout(size_hint_y=0.6)
+        for i in range(2):
+            offset = 1.0 * (i + 1)
+            shadow_card = Image(
+                source=CARD_BACK_IMAGE,
+                allow_stretch=True,
+                keep_ratio=True,
+                size_hint=(0.8, 0.8),
+                pos_hint={'center_x': 0.5 - 0.02 * offset, 'center_y': 0.5 - 0.02 * offset},
+                opacity=0.5 - 0.15 * i
+            )
+            deck_display.add_widget(shadow_card)
+        self.deck_image = Image(
+            source=CARD_BACK_IMAGE,
+            allow_stretch=True,
+            keep_ratio=True,
+            size_hint=(0.8, 0.8),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5}
+        )
+        deck_display.add_widget(self.deck_image)
+        left_area.add_widget(deck_display)
+        self.deck_count_label = StyledLabel(
+            text="0 lá",
+            size_hint_y=0.2,
+            font_size=14,
+            color=(0.9, 0.9, 0.7, 1)
+        )
+        left_area.add_widget(self.deck_count_label)
+        center_area = BoxLayout(orientation='vertical', size_hint_x=0.5)
+        self.last_played_title = StyledLabel(
+            text="Lá bài vừa đánh",
+            size_hint_y=0.2,
+            font_size=16,
+            bold=True,
+            color=(0.9, 0.8, 0.3, 1)
+        )
+        center_area.add_widget(self.last_played_title)
+        played_card_frame = BoxLayout(size_hint_y=0.8, padding=[10, 5])
+        with played_card_frame.canvas.before:
+            Color(0.7, 0.6, 0.2, 0.22)
+            played_card_bg = RoundedRectangle(radius=[10, ])
+        played_card_frame.bind(pos=lambda inst, val: self._update_rect(played_card_frame, val),
+                               size=lambda inst, val: self._update_rect(played_card_frame, val))
+        self.last_played_card_container = RelativeLayout(size_hint=(1, 1))
+        self.last_played_card_image = Image(
+            source=EMPTY_CARD_IMAGE,
+            allow_stretch=True,
+            keep_ratio=True,
+            size_hint=(0.9, 0.9),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5},
+            opacity=0.3
+        )
+        self.last_played_card_container.add_widget(self.last_played_card_image)
+        played_card_frame.add_widget(self.last_played_card_container)
+        center_area.add_widget(played_card_frame)
+        right_area = BoxLayout(orientation='vertical', size_hint_x=0.25)
+        right_area.add_widget(StyledLabel(
+            text="Thông tin",
+            size_hint_y=0.2,
+            font_size=16,
+            color=(0.9, 0.9, 0.7, 1)
+        ))
+        game_info_frame = BoxLayout(orientation='vertical', size_hint_y=0.8)
+        with game_info_frame.canvas.before:
+            Color(0.1, 0.15, 0.2, 0.5)
+            game_info_bg = RoundedRectangle(radius=[10, ])
+        game_info_frame.bind(pos=lambda inst, val: self._update_rect(game_info_frame, val),
+                             size=lambda inst, val: self._update_rect(game_info_frame, val))
+        self.round_info_label = StyledLabel(
+            text="Vòng đấu đang diễn ra",
+            font_size=12,
+            color=(0.9, 0.9, 1, 1),
+            halign='center'
+        )
+        self.round_info_label.bind(size=self.round_info_label.setter('text_size'))
+        game_info_frame.add_widget(self.round_info_label)
+        self.players_remaining_label = StyledLabel(
+            text="Người chơi: 0/0",
+            font_size=12,
+            color=(0.9, 0.9, 1, 1),
+            halign='center'
+        )
+        self.players_remaining_label.bind(size=self.players_remaining_label.setter('text_size'))
+        game_info_frame.add_widget(self.players_remaining_label)
+        right_area.add_widget(game_info_frame)
+        center_game_area.add_widget(left_area)
+        center_game_area.add_widget(center_area)
+        center_game_area.add_widget(right_area)
+        game_area.add_widget(center_game_area)
+        self.add_widget(game_area)
+
+        # --- Action Button (Bottom) ---
+        button_container = BoxLayout(size_hint_y=None, height=60, padding=[100, 0])
+        self.action_button = Button(
+            text="Bắt đầu ván mới",
+            size_hint=(1, 0.9),
+            pos_hint={'center_y': 0.5},
+            background_color=(0.4, 0.6, 0.9, 1),
+            font_size=19,
+            bold=True,
+            border=(0, 0, 0, 5)
+        )
+        self.action_button.bind(on_press=self.on_press_action_button)
+        button_container.add_widget(self.action_button)
+        # Add a wrapper for the button to control its height correctly
+        bottom_bar = BoxLayout(size_hint_y=None, height=dp(65), padding=(0, dp(5), 0, 0))
+        bottom_bar.add_widget(button_container)
+        self.add_widget(bottom_bar)
+
+        self.update_ui_full()
+
+    def log_message(self, msg, permanent=True):
+        if permanent:
+            self.game_log.append(msg)
+            if len(self.game_log) > 100:
+                self.game_log = self.game_log[-100:]
+        if hasattr(self, 'message_label'):
+            self.message_label.text = "\n".join(self.game_log)
+            if self.message_label.parent and isinstance(self.message_label.parent, ScrollView):
+                self.message_label.parent.scroll_y = 0
+
+    def update_ui_full(self):
+        if not hasattr(self, 'score_label'):
+            return
+        self.cleanup_leftover_rectangles()
+        score_texts = []
+        for p in self.players_session_list:
+            token_display = "*" * p.tokens + "-" * (self.tokens_to_win_session - p.tokens)
+            score_texts.append(f"{p.name}: {token_display}")
+        self.score_label.text = " | ".join(score_texts)
+        current_player_name_round = "N/A"
+        is_round_active_for_ui = False
+        if self.current_round_manager and self.current_round_manager.round_active:
+            is_round_active_for_ui = True
+            current_player_name_round = self.players_session_list[self.current_round_manager.current_player_idx].name
+
+        if self.game_over_session_flag:
+            self.turn_label.text = "Trò chơi kết thúc!"
+            self.action_button.text = "Bắt đầu ván mới"
+            self.action_button.background_color = (0.4, 0.6, 0.9, 1)
+            self.action_button.disabled = False
+            self.action_button.opacity = 1
+        elif not is_round_active_for_ui:
+            self.turn_label.text = "Vòng đấu kết thúc"
+            self.action_button.text = "Bắt đầu vòng tiếp theo"
+            self.action_button.background_color = (0.5, 0.7, 0.3, 1)
+            self.action_button.disabled = False
+            self.action_button.opacity = 1
+        else:
+            self.turn_label.text = f"Lượt của: {current_player_name_round}"
+            # Hide the button during a player's turn instead of showing "Forfeit"
+            self.action_button.text = ""
+            self.action_button.disabled = True
+            self.action_button.opacity = 0
+
+        if self.current_round_manager and self.current_round_manager.deck:
+            self.deck_count_label.text = f"{self.current_round_manager.deck.count()} lá"
+            self.deck_image.source = CARD_BACK_IMAGE if not self.current_round_manager.deck.is_empty() else EMPTY_CARD_IMAGE
+            self.deck_image.opacity = 1.0 if not self.current_round_manager.deck.is_empty() else 0.3
+            active_players = sum(1 for p in self.players_session_list if not p.is_eliminated)
+            total_players = len(self.players_session_list)
+            self.players_remaining_label.text = f"Người chơi: {active_players}/{total_players}"
+            if self.current_round_manager.round_active:
+                current_player = self.players_session_list[self.current_round_manager.current_player_idx].name
+                self.round_info_label.text = f"Lượt của: {current_player}"
+            else:
+                self.round_info_label.text = "Vòng đấu kết thúc"
+        else:
+            self.deck_count_label.text = "0 lá"
+            self.deck_image.source = EMPTY_CARD_IMAGE
+            self.deck_image.opacity = 0.3
+            self.round_info_label.text = "Không có vòng đấu"
+            self.players_remaining_label.text = "Người chơi: 0/0"
+        last_played_card = None
+        last_played_by = None
+        human_player = self.players_session_list[self.human_player_id]
+        if human_player.discard_pile and len(human_player.discard_pile) > 0:
+            last_played_card = human_player.discard_pile[-1]
+            last_played_by = human_player
+        else:
+            for player in self.players_session_list:
+                if player.id != self.human_player_id and player.discard_pile and len(player.discard_pile) > 0:
+                    last_played_card = player.discard_pile[-1]
+                    last_played_by = player
+                    break
+        self.last_played_card_container.clear_widgets()
+        if last_played_card:
+            card_button = ImageButton(
+                source=last_played_card.image_path,
+                card_info_callback=self.display_card_info_popup,
+                card_data=last_played_card,
+                allow_stretch=True,
+                keep_ratio=True,
+                size_hint=(0.95, 0.95),
+                pos_hint={'center_x': 0.5, 'center_y': 0.5}
+            )
+            self.last_played_card_container.add_widget(card_button)
+            player_name = last_played_by.name if last_played_by else "Không rõ"
+            self.last_played_title.text = f"Bài của: {player_name}"
+        else:
+            empty_card = Image(
+                source=EMPTY_CARD_IMAGE,
+                allow_stretch=True,
+                keep_ratio=True,
+                size_hint=(0.95, 0.95),
+                pos_hint={'center_x': 0.5, 'center_y': 0.5},
+                opacity=0.3
+            )
+            self.last_played_card_container.add_widget(empty_card)
+            self.last_played_title.text = "Chưa có bài đánh ra"
+        self.update_opponents_display()
+        self.update_player_hand()
+        self.log_message("", permanent=False)
+
+    def update_opponents_display(self):
+        self.opponents_grid.clear_widgets()
+        self.opponent_widgets_map.clear()
+        if self.num_players_session <= 1:
+            return
+        self.opponents_grid.cols = min(3, self.num_players_session - 1)
+        self.opponents_grid.size_hint_x = None if self.num_players_session - 1 > 3 else 1
+        for p_opponent in self.players_session_list:
+            if p_opponent.id == self.human_player_id:
+                continue
+            opponent_container = BoxLayout(
+                orientation='vertical',
+                size_hint_y=None,
+                height=210,
+                width=160,
+                padding=[8, 8, 8, 8]
+            )
+
+            name_box = BoxLayout(size_hint_y=0.15)
+            with name_box.canvas.before:
+                if p_opponent.is_eliminated:
+                    Color(0.4, 0.08, 0.08, 0.9)
+                elif p_opponent.is_protected:
+                    Color(0.15, 0.4, 0.15, 0.9)
+                else:
+                    Color(0.1, 0.1, 0.2, 0.9)
+                RoundedRectangle(radius=[10, 10, 0, 0])
+            name_box.bind(pos=self._update_rect, size=self._update_rect)
+            token_text = f"{p_opponent.name}"
+            status_text = " [Bị loại]" if p_opponent.is_eliminated else " [An toàn]" if p_opponent.is_protected else ""
+            name_label = StyledLabel(
+                text=token_text + status_text,
+                font_size='13sp',
+                bold=True,
+                color=(1, 1, 0.85, 1) if not p_opponent.is_eliminated else (1, 0.7, 0.7, 1)
+            )
+            name_box.add_widget(name_label)
+            token_label = StyledLabel(
+                text="*" * p_opponent.tokens + "-" * (self.tokens_to_win_session - p_opponent.tokens),
+                font_size='12sp',
+                color=(1, 0.95, 0.5, 1),
+                bold=True
+            )
+            name_box.add_widget(token_label)
+            opponent_container.add_widget(name_box)
+            card_img_src = CARD_BACK_IMAGE
+            if p_opponent.is_eliminated:
+                card_img_src = ELIMINATED_IMAGE
+            elif not p_opponent.hand:
+                card_img_src = "transparent"
+            card_box = BoxLayout(size_hint_y=0.55)
+            if card_img_src == "transparent":
+                card_image = Widget()
+            elif card_img_src == CARD_BACK_IMAGE or card_img_src == ELIMINATED_IMAGE:
+                card_image = Image(source=card_img_src, allow_stretch=True, keep_ratio=True)
+            else:
+                if p_opponent.hand:
+                    card_obj = p_opponent.hand[0]
+                    card_image = ImageButton(
+                        source=card_img_src,
+                        card_info_callback=self.display_card_info_popup,
+                        card_data=card_obj
+                    )
+                else:
+                    card_image = Widget()
+            card_box.add_widget(card_image)
+            opponent_container.add_widget(card_box)
+            discard_box = BoxLayout(orientation='vertical', size_hint_y=0.3)
+            discard_box.add_widget(StyledLabel(text="Bài bỏ", font_size='10sp', size_hint_y=0.3))
+            if p_opponent.discard_pile:
+                discard_card = p_opponent.discard_pile[-1]
+                discard_image = ImageButton(
+                    source=discard_card.image_path,
+                    allow_stretch=True,
+                    keep_ratio=True,
+                    size_hint_y=0.7,
+                    card_info_callback=self.display_card_info_popup,
+                    card_data=discard_card
+                )
+            else:
+                discard_image = Image(
+                    source=EMPTY_CARD_IMAGE,
+                    allow_stretch=True,
+                    keep_ratio=True,
+                    size_hint_y=0.7,
+                    opacity=0.3
+                )
+            discard_box.add_widget(discard_image)
+            opponent_container.add_widget(discard_box)
+            self.opponents_grid.add_widget(opponent_container)
+            self.opponent_widgets_map[p_opponent.id] = opponent_container
+
+    def update_player_hand(self):
+        human_player = self.players_session_list[self.human_player_id]
+        self.player_hand_area.clear_widgets()
+        if human_player.is_eliminated:
+            self.player_hand_area.add_widget(Image(source=ELIMINATED_IMAGE, allow_stretch=True))
+            self.player_hand_area.add_widget(StyledLabel(text="Đã bị loại!", color=(1, 0.5, 0.5, 1), font_size=24))
+            return
+        if not human_player.hand:
+            return
+        is_player_turn_active = (
+                self.current_round_manager and
+                self.current_round_manager.round_active and
+                self.current_round_manager.current_player_idx == self.human_player_id and
+                not self.waiting_for_input
+        )
+        token_label = StyledLabel(
+            text="Tín vật: " + "*" * human_player.tokens + "-" * (self.tokens_to_win_session - human_player.tokens),
+            font_size='15sp',
+            color=(1, 0.95, 0.5, 1),
+            bold=True
+        )
+        self.player_hand_area.add_widget(token_label)
+        for card_obj in human_player.hand:
+            card_container = BoxLayout(
+                orientation='vertical',
+                size_hint=(1 / len(human_player.hand) if len(human_player.hand) > 0 else 1, 1),
+                padding=[10, 10, 10, 5]
+            )
+
+            card_frame = BoxLayout(padding=[2, 2, 2, 2])
+            with card_frame.canvas.before:
+                if is_player_turn_active:
+                    Color(0.9, 0.8, 0.3, 0.8)
+                else:
+                    Color(0.4, 0.4, 0.5, 0.4)
+                RoundedRectangle(radius=[5, ])
+            card_frame.bind(pos=lambda inst, val: self._update_rect(inst, val),
+                            size=lambda inst, val: self._update_rect(inst, val))
+            card_button = ImageButton(
+                source=card_obj.image_path,
+                card_info_callback=self.display_card_info_popup,
+                card_data=card_obj,
+                size_hint=(0.95, 0.95),
+                pos_hint={'center_x': 0.5, 'center_y': 0.5}
+            )
+            card_button.card_name = card_obj.name
+            card_button.bind(on_press=self.on_player_card_selected)
+            card_button.disabled = not is_player_turn_active
+            card_button.opacity = 1.0 if is_player_turn_active else 0.7
+            card_frame.add_widget(card_button)
+            card_container.add_widget(card_frame)
+            card_info = BoxLayout(size_hint_y=None, height=25, padding=[0, 5, 0, 0])
+            with card_info.canvas.before:
+                Color(0.15, 0.15, 0.2, 0.8)
+                RoundedRectangle(radius=[0, 0, 5, 5])
+            card_info.bind(pos=self._update_rect, size=self._update_rect)
+            info_label = StyledLabel(
+                text=f"{card_obj.name} ({card_obj.value})",
+                font_size='13sp',
+                color=(1, 0.92, 0.7, 1),
+                bold=True
+            )
+            card_info.add_widget(info_label)
+            card_container.add_widget(card_info)
+            self.player_hand_area.add_widget(card_container)
+
+    def _get_player_widget_by_id(self, player_id):
+        if player_id == self.human_player_id:
+            return self.human_player_display_wrapper
+        return self.opponent_widgets_map.get(player_id)
+
+    def _update_anim_rect_pos_size(self, instance, value):
+        if hasattr(instance, 'canvas_anim_bg_rect'):
+            instance.canvas_anim_bg_rect.pos = instance.pos
+            instance.canvas_anim_bg_rect.size = instance.size
+
+    def on_press_action_button(self, instance):
+        if instance.disabled:
+            return
+        if self.game_over_session_flag:
+            self.prompt_player_count()
+        elif self.current_round_manager and not self.current_round_manager.round_active:
+            self.start_new_round()
+
+    def ui_animate_effect(self, effect_details, duration=1.0, on_complete_callback=None):
+        self.dismiss_active_popup()
+        processed_animation = False
+        anim_type = effect_details.get('type')
+        if anim_type == 'highlight_player':
+            player_ids = effect_details.get('player_ids', [])
+            color_type = effect_details.get('color_type', 'target')
+            actor_id = effect_details.get('actor_id')
+            if self.game_over_session_flag and color_type in ['elimination', 'actor_action']:
+                if on_complete_callback:
+                    on_complete_callback()
+                return
+            if color_type == 'target':
+                highlight_color_rgba = (0.5, 0.8, 1, 0.6)
+            elif color_type == 'elimination':
+                highlight_color_rgba = (1, 0.2, 0.2, 0.7)
+            elif color_type == 'protection':
+                highlight_color_rgba = (0.2, 1, 0.2, 0.7)
+            elif color_type == 'actor_action':
+                highlight_color_rgba = (1, 0.8, 0.2, 0.6)
+            else:
+                highlight_color_rgba = (0.7, 0.7, 0.7, 0.5)
+            widgets_to_animate_this_call = []
+            if actor_id is not None and effect_details.get('highlight_actor', False):
+                actor_widget = self._get_player_widget_by_id(actor_id)
+                if actor_widget:
+                    widgets_to_animate_this_call.append({'widget': actor_widget, 'color': (1, 0.8, 0.2, 0.5)})
+            for p_id in player_ids:
+                widget = self._get_player_widget_by_id(p_id)
+                if widget:
+                    widgets_to_animate_this_call.append({'widget': widget, 'color': highlight_color_rgba})
+            for item in widgets_to_animate_this_call:
+                widget_to_animate = item['widget']
+                color_rgba = item['color']
+                processed_animation = True
+                if widget_to_animate not in self.animated_widget_details:
+                    with widget_to_animate.canvas.before:
+                        widget_to_animate.canvas_anim_bg_color = Color(*color_rgba)
+                        widget_to_animate.canvas_anim_bg_rect = Rectangle(
+                            size=widget_to_animate.size,
+                            pos=widget_to_animate.pos
+                        )
+                    widget_to_animate.bind(
+                        pos=self._update_anim_rect_pos_size,
+                        size=self._update_anim_rect_pos_size
+                    )
+                    self.animated_widget_details[widget_to_animate] = {
+                        'widget': widget_to_animate,
+                        'instruction_color': widget_to_animate.canvas_anim_bg_color,
+                        'instruction_rect': widget_to_animate.canvas_anim_bg_rect,
+                        'original_bound_pos_size': True
+                    }
+                else:
+                    widget_to_animate.canvas_anim_bg_color.rgba = color_rgba
+                    widget_to_animate.canvas_anim_bg_rect.size = widget_to_animate.size
+                    widget_to_animate.canvas_anim_bg_rect.pos = widget_to_animate.pos
+        if processed_animation:
+            Clock.schedule_once(lambda dt: self._clear_animations_and_proceed(on_complete_callback), duration)
+        elif on_complete_callback:
+            on_complete_callback()
+
+    def _clear_animations_and_proceed(self, on_complete_callback):
+        for widget, details in list(self.animated_widget_details.items()):
+            w = details['widget']
+            if hasattr(w, 'canvas_anim_bg_color'):
+                w.canvas_anim_bg_color.rgba = (0, 0, 0, 0)
+        self.animated_widget_details.clear()
+        if on_complete_callback:
+            on_complete_callback()
+
+    def start_new_game_session(self):
+        self.log_message(f"--- Bắt đầu ván chơi mới với {self.num_players_session} người chơi ---")
+        for p in self.players_session_list:
+            p.tokens = 0
+        self.game_over_session_flag = False
+        self.start_new_round()
+
+    def start_new_round(self):
+        self.log_message("--- Giao diện: Chuẩn bị vòng mới ---")
+        if self.game_over_session_flag:
+            self.log_message("Trò chơi đã kết thúc. Không thể bắt đầu vòng mới cho đến khi có ván chơi mới.")
+            self.update_ui_full()
+            return
+        game_deck = Deck(self.num_players_session, self.log_message)
+        game_deck.burn_one_card(self.num_players_session)
+        min_cards_needed = self.num_players_session
+        if game_deck.count() < min_cards_needed:
+            self.log_message(
+                f"Lỗi: Không đủ bài trong chồng bài ({game_deck.count()}) cho {self.num_players_session} người chơi. Cần {min_cards_needed}."
+            )
+            self.game_over_session_flag = True
+            self.update_ui_full()
+            return
+        ui_callbacks = {
+            'update_ui_full_callback': self.update_ui_full,
+            'set_waiting_flag_callback': self.set_waiting_for_input_flag,
+            'get_active_popup_callback': lambda: self.active_popup,
+            'dismiss_active_popup_callback': self.dismiss_active_popup,
+            'request_target_selection_callback': self.ui_display_target_selection_popup,
+            'request_confirmation_popup_callback': self.ui_display_confirmation_popup,
+            'request_guard_value_popup_callback': self.ui_display_guard_value_popup,
+            'award_round_tokens_callback': self.award_round_tokens_and_check_game_over,
+            'check_game_over_token_callback': self.check_game_over_on_token_gain,
+            'game_over_callback': self.handle_game_over_from_round,
+            'animate_effect_callback': self.ui_animate_effect,
+            'show_turn_notification_callback': self.show_turn_notification,
+        }
+        self.current_round_manager = GameRound(
+            self.players_session_list,
+            game_deck,
+            self.human_player_id,
+            self.log_message,
+            ui_callbacks
+        )
+        self.current_round_manager.start_round()
+
+    def on_player_card_selected(self, instance):
+        if not self.current_round_manager or not self.current_round_manager.round_active or \
+                self.players_session_list[self.human_player_id].is_cpu or \
+                self.current_round_manager.current_player_idx != self.human_player_id or \
+                self.waiting_for_input:
+            return
+        card_name_to_play = instance.card_name
+        self.current_round_manager.human_plays_card(card_name_to_play)
+
+    def set_waiting_for_input_flag(self, is_waiting):
+        self.waiting_for_input = is_waiting
+        self.update_ui_full()
+
+    def dismiss_active_popup(self):
+        if self.active_popup:
+            self.active_popup.dismiss()
+            self.active_popup = None
+
+    def _create_popup_layout_with_scroll(self, title_text):
+        popup_layout = BoxLayout(orientation='vertical', spacing="10dp", padding="10dp")
+        popup_layout.add_widget(StyledLabel(
+            text=title_text,
+            font_size=18,
+            color=(1, 0.9, 0.7, 1)
+        ))
+        scroll_content = GridLayout(cols=1, spacing="5dp", size_hint_y=None)
+        scroll_content.bind(minimum_height=scroll_content.setter('height'))
+        scroll_view = ScrollView(size_hint=(1, 1))
+        scroll_view.add_widget(scroll_content)
+        popup_layout.add_widget(scroll_view)
+        return popup_layout, scroll_content
+
+    def ui_display_target_selection_popup(self, acting_player_obj, card_played_obj, valid_targets_list,
+                                          continuation_callback_in_gameround, cancel_callback_in_gameround):
+        self.dismiss_active_popup()
+        self.set_waiting_for_input_flag(True)
+        popup_layout = BoxLayout(orientation='vertical', spacing=24, padding=[36, 36, 36, 36])
+        header_box = BoxLayout(size_hint_y=0.3, spacing=18)
+        card_image = Image(
+            source=card_played_obj.image_path,
+            size_hint_x=0.22,
+            allow_stretch=True,
+            keep_ratio=True
+        )
+        header_box.add_widget(card_image)
+        info_box = BoxLayout(orientation='vertical', size_hint_x=0.78)
+        info_box.add_widget(StyledLabel(
+            text=f"{card_played_obj.name} (Giá trị: {card_played_obj.value})",
+            font_size=20,
+            color=(1, 0.92, 0.7, 1)
+        ))
+        info_box.add_widget(StyledLabel(
+            text=card_played_obj.description,
+            font_size=15,
+            color=(1, 1, 1, 0.85)
+        ))
+        header_box.add_widget(info_box)
+        popup_layout.add_widget(header_box)
+        popup_layout.add_widget(StyledLabel(
+            text=f"Chọn mục tiêu cho {acting_player_obj.name}:",
+            font_size=18,
+            color=(1, 0.92, 0.7, 1),
+            size_hint_y=None,
+            height=36
+        ))
+        scroll_view = ScrollView(size_hint=(1, 0.6))
+        target_grid = GridLayout(cols=1, spacing=18, size_hint_y=None)
+        target_grid.bind(minimum_height=target_grid.setter('height'))
+        for target in valid_targets_list:
+            btn_text = f"{target.name}"
+            if target == acting_player_obj:
+                btn_text += " (Chính mình)"
+
+            def make_callback(inst, ap=acting_player_obj, tid=target.id):
+                self.dismiss_active_popup()
+                continuation_callback_in_gameround(ap, tid)
+
+            btn = self.create_selection_button(btn_text, make_callback)
+            target_grid.add_widget(btn)
+        scroll_view.add_widget(target_grid)
+        popup_layout.add_widget(scroll_view)
+
+        cancel_btn = self.create_selection_button(
+            "Quay lại (Chọn lá khác)",
+            lambda inst: cancel_callback_in_gameround(acting_player_obj)
+        )
+        cancel_btn.background_color = (0.7, 0.2, 0.2, 0.92)
+        cancel_btn.bind(
+            on_press=lambda inst: setattr(inst, 'background_color', (0.85, 0.3, 0.3, 1)),
+            on_release=lambda inst: setattr(inst, 'background_color', (0.7, 0.2, 0.2, 0.92))
+        )
+        popup_layout.add_widget(cancel_btn)
+
+        self.active_popup = Popup(
+            title=f"Chọn mục tiêu cho {card_played_obj.name}",
+            content=popup_layout,
+            size_hint=(0.8, 0.85),
+            auto_dismiss=False,
+            title_color=(1, 0.9, 0.7, 1),
+            title_size='20sp',
+            title_align='center',
+            separator_color=(0.9, 0.8, 0.3, 0.4),
+            background_color=(0.18, 0.07, 0.07, 0.98)
+        )
+        self.active_popup.open()
+
+    def ui_display_confirmation_popup(self, acting_player_obj, card_played_obj,
+                                      continuation_callback_in_gameround, cancel_callback_in_gameround):
+        self.dismiss_active_popup()
+        self.set_waiting_for_input_flag(True)
+
+        popup_layout = BoxLayout(orientation='vertical', spacing=24, padding=[36, 36, 36, 36])
+        header_box = BoxLayout(size_hint_y=0.6, spacing=18)
+        card_image = Image(
+            source=card_played_obj.image_path,
+            size_hint_x=0.35,
+            allow_stretch=True,
+            keep_ratio=True
+        )
+        header_box.add_widget(card_image)
+        info_box = BoxLayout(orientation='vertical', size_hint_x=0.65)
+        info_box.add_widget(StyledLabel(
+            text=f"{card_played_obj.name} (Giá trị: {card_played_obj.value})",
+            font_size=20,
+            color=(1, 0.92, 0.7, 1)
+        ))
+        info_box.add_widget(StyledLabel(
+            text=f"[b]Hiệu ứng:[/b] {card_played_obj.description}",
+            font_size=15,
+            markup=True,
+            color=(1, 1, 1, 0.85)
+        ))
+        header_box.add_widget(info_box)
+        popup_layout.add_widget(header_box)
+
+        button_box = BoxLayout(orientation='vertical', size_hint_y=0.4, spacing=15)
+        confirm_btn = self.create_selection_button(
+            f"Xác nhận chơi {card_played_obj.name}",
+            lambda inst: (self.dismiss_active_popup(), continuation_callback_in_gameround(acting_player_obj))
+        )
+        confirm_btn.background_color = (0.2, 0.5, 0.3, 0.92)
+        confirm_btn.bind(
+            on_press=lambda inst: setattr(inst, 'background_color', (0.3, 0.65, 0.4, 1)),
+            on_release=lambda inst: setattr(inst, 'background_color', (0.2, 0.5, 0.3, 0.92))
+        )
+        button_box.add_widget(confirm_btn)
+
+        cancel_btn = self.create_selection_button(
+            "Quay lại (Chọn lá khác)",
+            lambda inst: cancel_callback_in_gameround(acting_player_obj)
+        )
+        cancel_btn.background_color = (0.7, 0.2, 0.2, 0.92)
+        cancel_btn.bind(
+            on_press=lambda inst: setattr(inst, 'background_color', (0.85, 0.3, 0.3, 1)),
+            on_release=lambda inst: setattr(inst, 'background_color', (0.7, 0.2, 0.2, 0.92))
+        )
+        button_box.add_widget(cancel_btn)
+        popup_layout.add_widget(button_box)
+
+        self.active_popup = Popup(
+            title=f"Xác nhận chơi bài",
+            content=popup_layout,
+            size_hint=(0.7, 0.6),
+            auto_dismiss=False,
+            title_color=(1, 0.9, 0.7, 1),
+            title_size='20sp',
+            title_align='center',
+            separator_color=(0.9, 0.8, 0.3, 0.4),
+            background_color=(0.18, 0.07, 0.07, 0.98)
+        )
+        self.active_popup.open()
+
+    def ui_display_guard_value_popup(self, acting_player_obj, target_player_obj, possible_values_list,
+                                     continuation_callback_in_gameround, cancel_callback_in_gameround):
+        self.dismiss_active_popup()
+        self.set_waiting_for_input_flag(True)
+        popup_layout = BoxLayout(orientation='vertical', spacing="15dp", padding="20dp")
+        popup_layout.add_widget(StyledLabel(
+            text=f"Cận vệ: Đoán giá trị bài của {target_player_obj.name} (không phải 1):",
+            font_size=18,
+            color=(1, 0.9, 0.7, 1),
+            size_hint_y=None,
+            height=50
+        ))
+        options_grid = GridLayout(cols=4, spacing="10dp")
+        for val in possible_values_list:
+            def make_callback(inst, ap=acting_player_obj, tp=target_player_obj, v=val):
+                self.dismiss_active_popup()
+                continuation_callback_in_gameround(ap, tp, v)
+
+            btn = self.create_selection_button(str(val), make_callback)
+            options_grid.add_widget(btn)
+        popup_layout.add_widget(options_grid)
+
+        cancel_btn = self.create_selection_button(
+            "Quay lại (Chọn lá khác)",
+            lambda inst: cancel_callback_in_gameround(acting_player_obj)
+        )
+        cancel_btn.background_color = (0.7, 0.2, 0.2, 0.92)
+        cancel_btn.bind(
+            on_press=lambda inst: setattr(inst, 'background_color', (0.85, 0.3, 0.3, 1)),
+            on_release=lambda inst: setattr(inst, 'background_color', (0.7, 0.2, 0.2, 0.92))
+        )
+        popup_layout.add_widget(cancel_btn)
+
+        self.active_popup = Popup(
+            title="Chọn giá trị cho Cận vệ",
+            content=popup_layout,
+            size_hint=(0.7, 0.6),
+            auto_dismiss=False,
+            title_color=(1, 0.9, 0.7, 1),
+            title_size='20sp',
+            title_align='center'
+        )
+        self.active_popup.open()
+
+    def display_victory_screen(self, winner):
+        self.dismiss_active_popup()
+        victory_layout = BoxLayout(orientation='vertical', spacing=20, padding=30)
+        with victory_layout.canvas.before:
+            Color(0.2, 0.2, 0.3, 0.9)
+            RoundedRectangle(pos=victory_layout.pos, size=victory_layout.size, radius=[15, ])
+        victory_layout.bind(pos=self._update_rect, size=self._update_rect)
+        title_label = StyledLabel(
+            text=f"{winner.name} CHIẾN THẮNG!",
+            font_size=40,
+            bold=True,
+            color=(1, 0.9, 0.3, 1),
+            size_hint_y=0.3
+        )
+        victory_layout.add_widget(title_label)
+        image_box = BoxLayout(size_hint_y=0.3)
+        winner_image = Image(
+            source=CARD_BACK_IMAGE,
+            size_hint=(0.5, 0.8),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5}
+        )
+        image_box.add_widget(winner_image)
+        info_text = f"Đã giành được {winner.tokens} tín vật tình yêu\nvà chinh phục trái tim của Công chúa!"
+        info_label = StyledLabel(
+            text=info_text,
+            font_size=22,
+            color=(0.9, 0.9, 1, 1),
+            size_hint_y=0.2,
+            halign='center'
+        )
+        info_label.bind(size=info_label.setter('text_size'))
+        victory_layout.add_widget(info_label)
+        button_box = BoxLayout(size_hint_y=0.2, padding=[40, 20])
+        new_game_button = Button(
+            text="Chơi Lại",
+            size_hint=(0.7, 0.6),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5},
+            background_color=(0.4, 0.6, 0.9, 1),
+            font_size=24,
+            bold=True
+        )
+        new_game_button.bind(on_press=lambda x: (self.dismiss_active_popup(), self.prompt_player_count()))
+        button_box.add_widget(new_game_button)
+        victory_layout.add_widget(button_box)
+        self.active_popup = Popup(
+            title="Kết Thúc Trò Chơi",
+            content=victory_layout,
+            size_hint=(0.8, 0.7),
+            title_align='center',
+            title_size='24sp',
+            title_color=(1, 0.8, 0.4, 1),
+            auto_dismiss=False,
+            background='atlas://data/images/defaulttheme/button_pressed'
+        )
+        self.active_popup.open()
+
+    def award_round_tokens_and_check_game_over(self, list_of_winner_players):
+        game_ended_this_round = False
+        final_winner_of_game = None
+        for winner_of_round in list_of_winner_players:
+            if winner_of_round is None:
+                continue
+            self.log_message(f"{winner_of_round.name} nhận được một tín vật tình yêu vì đã thắng vòng này!")
+            winner_of_round.tokens += 1
+            is_victory = (winner_of_round.id == self.human_player_id)
+            self.show_victory_defeat_effect(is_victory)
+            if self.check_game_over_on_token_gain(winner_of_round):
+                game_ended_this_round = True
+                final_winner_of_game = winner_of_round
+        if game_ended_this_round and final_winner_of_game:
+            self.handle_game_over_from_round(final_winner_of_game)
+        self.update_ui_full()
+
+    def check_game_over_on_token_gain(self, player_who_gained_token):
+        if self.game_over_session_flag:
+            return True
+        if player_who_gained_token.tokens >= self.tokens_to_win_session:
+            return True
+        return False
+
+    def handle_game_over_from_round(self, winner_of_game):
+        if self.game_over_session_flag:
+            return
+        self.log_message(
+            f"--- TRÒ CHƠI KẾT THÚC! {winner_of_game.name} chiến thắng với {winner_of_game.tokens} tín vật! ---")
+        self.game_over_session_flag = True
+        if self.current_round_manager:
+            self.current_round_manager.round_active = False
+        self.update_ui_full()
+        self.display_victory_screen(winner_of_game)

@@ -1,15 +1,6 @@
-# constants.py
-import os
-
-# --- Asset Paths ---
 CARD_FOLDER = "assets/cards"
-INTRO_BACKGROUND = "assets/chill.webp"
-RULES_BACKGROUND = "assets/Rules.png"
-CARD_BACK_IMAGE = os.path.join(CARD_FOLDER, "back.png")
-ELIMINATED_IMAGE = os.path.join(CARD_FOLDER, "back.png")
-EMPTY_CARD_IMAGE = os.path.join(CARD_FOLDER, "empty_card.png")
-VICTORY_IMAGE = "assets/victory.webp"
-DEFEAT_IMAGE = "assets/defeat.webp"
+CARD_BACK_IMAGE = "assets/cards/back.png"
+ELIMINATED_IMAGE = "assets/cards/back.png"
 
 CARDS_DATA_RAW = {
     'Guard': {'value': 1, 'vietnamese_name': 'canve',
@@ -64,3 +55,5 @@ CARDS_DATA_RAW = {
                'description': "Đoán giá trị lá bài (không phải Cận vệ). Nhận một tín vật nếu đúng. Người bị đoán có thể rút lại bài.",
                'count_classic': 0, 'count_large': 1},
 }
+
+CARD_PROTOTYPES = {}  # Will be populated by Card objects from the UI side

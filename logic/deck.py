@@ -1,5 +1,5 @@
 import random
-from card import CARD_PROTOTYPES
+from .constants import CARD_PROTOTYPES
 
 class Deck:
     def __init__(self, num_players, log_callback):
