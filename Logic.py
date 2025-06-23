@@ -1,12 +1,24 @@
 import os
 import random
 from kivy.clock import Clock  # Clock is needed for CPU turn delays, a minor dependency.
+import sys
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # sys._MEIPASS is not defined, so we are running in a normal Python environment
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 # --- Constants and Raw Data ---
 
-CARD_FOLDER = "assets/cards"
-CARD_BACK_IMAGE = "assets/cards/back.png"
-ELIMINATED_IMAGE = "assets/cards/back.png"
+CARD_FOLDER = resource_path("assets/cards")
+CARD_BACK_IMAGE = resource_path("assets/cards/back.png")
+ELIMINATED_IMAGE = resource_path("assets/cards/back.png") # Or a different image if you have one
 
 CARDS_DATA_RAW = {
     'Guard': {'value': 1, 'vietnamese_name': 'canve',

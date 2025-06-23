@@ -21,18 +21,31 @@ from kivy.animation import Animation
 from kivy.metrics import dp
 from kivy.uix.widget import Widget
 from kivy.config import Config
+import sys  # <-- Add this import
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # sys._MEIPASS is not defined, so we are running in a normal Python environment
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
 
-INTRO_BACKGROUND = "assets/chill.webp"
-RULES_BACKGROUND = "assets/Rules.png"
-EMPTY_CARD_IMAGE = "assets/cards/empty_card.png"
-CARD_RULES_IMAGE = "assets/cards/card_list_2_4.png"  # New constant for the rules image
+# NEW - Apply the function
+INTRO_BACKGROUND = resource_path("assets/chill.webp")
+RULES_BACKGROUND = resource_path("assets/Rules.png")
+EMPTY_CARD_IMAGE = resource_path("assets/cards/empty_card.png")
+CARD_RULES_IMAGE = resource_path("assets/cards/card_list_2_4.png")
 
 from Logic import (
     Player, Deck, GameRound, Card,
     CARD_PROTOTYPES, CARDS_DATA_RAW,
-    CARD_FOLDER, CARD_BACK_IMAGE, ELIMINATED_IMAGE
+    CARD_FOLDER, CARD_BACK_IMAGE, ELIMINATED_IMAGE,
 )
 
 Window.size = (1000, 800)
@@ -343,7 +356,7 @@ class LoveLetterGame(BoxLayout):
     def show_victory_defeat_effect(self, is_victory=True):
         from kivy.uix.image import Image
         from kivy.animation import Animation
-        img_path = "assets/victory.webp" if is_victory else "assets/defeat.webp"
+        img_path = resource_path("assets/victory.webp") if is_victory else resource_path("assets/defeat.webp")
         if not os.path.exists(img_path):
             return
         effect_img = Image(
