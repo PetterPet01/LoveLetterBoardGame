@@ -21,11 +21,13 @@ from kivy.animation import Animation
 from kivy.metrics import dp
 from kivy.uix.widget import Widget
 from kivy.config import Config
+
 Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
 
 INTRO_BACKGROUND = "assets/chill.webp"
 RULES_BACKGROUND = "assets/Rules.png"
 EMPTY_CARD_IMAGE = "assets/cards/empty_card.png"
+CARD_RULES_IMAGE = "assets/cards/card_list_2_4.png"  # New constant for the rules image
 
 from Logic import (
     Player, Deck, GameRound, Card,
@@ -36,6 +38,7 @@ from Logic import (
 Window.size = (1000, 800)
 Window.clearcolor = (0.12, 0.07, 0.07, 1)
 
+
 class StyledLabel(Label):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -43,6 +46,7 @@ class StyledLabel(Label):
         self.bold = kwargs.get('bold', True)
         self.outline_width = kwargs.get('outline_width', 1)
         self.outline_color = kwargs.get('outline_color', (0, 0, 0, 1))
+
 
 class ImageButton(ButtonBehavior, Image):
     def __init__(self, **kwargs):
@@ -64,6 +68,7 @@ class ImageButton(ButtonBehavior, Image):
             return True
         return super(ImageButton, self).on_touch_down(touch)
 
+
 class CardDisplay(BoxLayout):
     def __init__(self, card_source="", name="", **kwargs):
         super().__init__(**kwargs)
@@ -73,7 +78,7 @@ class CardDisplay(BoxLayout):
         self.height = 180
         with self.canvas.before:
             Color(0.2, 0.2, 0.3, 0.7)
-            self.bg = RoundedRectangle(radius=[10,])
+            self.bg = RoundedRectangle(radius=[10, ])
         self.bind(pos=self._update_rect, size=self._update_rect)
         self.card_image = Image(source=card_source, allow_stretch=True, keep_ratio=True)
         self.add_widget(self.card_image)
@@ -83,6 +88,7 @@ class CardDisplay(BoxLayout):
     def _update_rect(self, instance, value):
         self.bg.pos = self.pos
         self.bg.size = self.size
+
 
 class IntroScreen(Screen):
     def __init__(self, **kwargs):
@@ -109,13 +115,16 @@ class IntroScreen(Screen):
             size_hint=(0.95, 0.9),
             pos_hint={'center_x': 0.5, 'center_y': 0.5}
         )
+
         def on_press(instance):
             instance.background_color = (0.9, 0.2, 0.2, 0.9)
             instance.font_size = 34
+
         def on_release(instance):
             instance.background_color = (0.8, 0.1, 0.1, 0.85)
             instance.font_size = 32
             self.go_to_rules(instance)
+
         start_button.bind(on_press=on_press)
         start_button.bind(on_release=on_release)
         button_container.add_widget(start_button)
@@ -125,8 +134,10 @@ class IntroScreen(Screen):
     def go_to_rules(self, instance):
         self.manager.current = 'rules'
 
+
 class RulesScreen(Screen):
     game_instance = None
+
     def __init__(self, **kwargs):
         super(RulesScreen, self).__init__(**kwargs)
         layout = FloatLayout()
@@ -161,7 +172,6 @@ class RulesScreen(Screen):
         if hasattr(self, 'game_instance') and self.game_instance:
             Clock.schedule_once(lambda dt: self.game_instance.initialize_game_setup(), 0.1)
 
-# --------Graphic.py-------- (Add this class)
 
 class TurnNotificationPopup(BoxLayout):
     def __init__(self, title_text, detail_text, **kwargs):
@@ -171,10 +181,10 @@ class TurnNotificationPopup(BoxLayout):
         self.spacing = dp(8)
         self.size_hint = (None, None)
         self.width = dp(450)
-        self.opacity = 0 # Start fully transparent
+        self.opacity = 0  # Start fully transparent
 
         with self.canvas.before:
-            Color(0.1, 0.1, 0.15, 0.9) # Semi-transparent dark background
+            Color(0.1, 0.1, 0.15, 0.9)  # Semi-transparent dark background
             self.bg = RoundedRectangle(radius=[dp(12)])
 
         self.bind(pos=self._update_rect, size=self._update_rect)
@@ -208,9 +218,10 @@ class TurnNotificationPopup(BoxLayout):
         self.bg.pos = self.pos
         self.bg.size = self.size
 
+
 class LoveLetterGame(BoxLayout):
     def __init__(self, **kwargs):
-        self.game_log = ["Welcome to Love Letter Kivy!"]
+        self.game_log = ["Chào mừng đến với Thư Tình (Kivy)!"]
         self.num_players_session = 0
         self.players_session_list = []
         self.human_player_id = 0
@@ -220,7 +231,7 @@ class LoveLetterGame(BoxLayout):
         self.active_popup = None
         self.waiting_for_input = False
         self.opponent_widgets_map = {}
-        self.active_notification = None # Add this line
+        self.active_notification = None
         self.animated_widget_details = {}
         super().__init__(**kwargs)
         self.orientation = 'vertical'
@@ -232,43 +243,33 @@ class LoveLetterGame(BoxLayout):
         self.bind(pos=self._update_rect, size=self._update_rect)
         Clock.schedule_once(self._delayed_setup, 1)
 
-    # ADD THIS NEW METHOD to LoveLetterGame
     def show_turn_notification(self, title, details, stay_duration=2.5):
         """
         Displays a non-blocking, animated notification on top of the game screen.
         """
-        # The container is the parent widget (the Screen), which allows overlaying.
         container = self.parent
         if not container:
-            # This is a safeguard. If the method is called before the widget is
-            # added to the screen, we simply do nothing.
             print("Warning: Cannot show notification, widget has no parent yet.")
             return
 
-        # If a notification is already showing, remove it immediately from the container.
         if self.active_notification and self.active_notification.parent:
             Animation.cancel_all(self.active_notification)
             container.remove_widget(self.active_notification)
             self.active_notification = None
 
-        # Create the new notification widget
         notification = TurnNotificationPopup(title_text=title, detail_text=details)
         notification.pos_hint = {'center_x': 0.5, 'center_y': 0.65}
 
-        # *** KEY CHANGE: Add the widget to the parent, not self ***
         container.add_widget(notification)
         self.active_notification = notification
 
-        # The animation sequence remains the same: fade in, stay, fade out
         anim = (
                 Animation(opacity=1, duration=0.4) +
                 Animation(duration=stay_duration) +
                 Animation(opacity=0, duration=0.5)
         )
 
-        # When the animation is complete, remove the widget from its parent
         def on_complete_animation(*args):
-            # Check if the notification still exists and has a parent before removing
             if notification.parent:
                 notification.parent.remove_widget(notification)
             if self.active_notification == notification:
@@ -276,6 +277,68 @@ class LoveLetterGame(BoxLayout):
 
         anim.bind(on_complete=on_complete_animation)
         anim.start(notification)
+
+    def show_card_rules_popup(self, instance):
+        """Displays a popup with the card rules image, scaled to fit the popup height and centered horizontally."""
+        self.dismiss_active_popup()
+        if not os.path.exists(CARD_RULES_IMAGE):
+            self.log_message(f"LỖI: Không tìm thấy ảnh luật chơi tại {CARD_RULES_IMAGE}")
+            return
+
+        popup_layout = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
+
+        title_label = StyledLabel(
+            text="Luật & Hiệu ứng các lá bài",
+            font_size='22sp',
+            color=(1, 0.9, 0.4, 1),
+            size_hint_y=None,
+            height=dp(40)
+        )
+        popup_layout.add_widget(title_label)
+
+        scroll_view = ScrollView(size_hint=(1, 1), do_scroll_x=True, do_scroll_y=False)
+
+        rules_image = Image(
+            source=CARD_RULES_IMAGE,
+            size_hint=(None, 1),
+            allow_stretch=True,
+        )
+
+        def set_image_width(instance, height):
+            if instance.image_ratio > 0:
+                instance.width = height * instance.image_ratio
+
+        rules_image.bind(height=set_image_width)
+
+        scroll_view.add_widget(rules_image)
+        popup_layout.add_widget(scroll_view)
+
+        close_btn = Button(
+            text="Đóng",
+            size_hint=(1, None),
+            height=dp(50),
+            background_color=(0.7, 0.2, 0.2, 1),
+            font_size='18sp',
+            bold=True
+        )
+        close_btn.bind(on_press=lambda x: self.dismiss_active_popup())
+        popup_layout.add_widget(close_btn)
+
+        self.active_popup = Popup(
+            title="Sổ tay hướng dẫn",
+            title_size='0sp',
+            separator_height=0,
+            content=popup_layout,
+            size_hint=(0.95, 0.95),
+            auto_dismiss=True,
+            background_color=(0.18, 0.07, 0.07, 0.98)
+        )
+
+        def center_scroll_on_open(popup_instance):
+            scroll_view.scroll_x = 0.5
+
+        self.active_popup.bind(on_open=center_scroll_on_open)
+        self.active_popup.open()
 
     def show_victory_defeat_effect(self, is_victory=True):
         from kivy.uix.image import Image
@@ -290,16 +353,21 @@ class LoveLetterGame(BoxLayout):
             pos_hint={'center_x': 0.5, 'center_y': 0.5},
             opacity=0
         )
+
         def update_size_pos(*_):
             effect_img.size = (min(self.width * 0.7, 700), min(self.height * 0.35, 350))
             effect_img.pos_hint = {'center_x': 0.5, 'center_y': 0.5}
+
         self.bind(size=update_size_pos)
         update_size_pos()
         self.add_widget(effect_img)
-        anim = Animation(opacity=1, duration=0.2) + Animation(opacity=1, duration=1.6) + Animation(opacity=0, duration=0.2)
+        anim = Animation(opacity=1, duration=0.2) + Animation(opacity=1, duration=1.6) + Animation(opacity=0,
+                                                                                                   duration=0.2)
+
         def remove_img(*_):
             if effect_img.parent:
                 self.remove_widget(effect_img)
+
         anim.bind(on_complete=remove_img)
         anim.start(effect_img)
 
@@ -318,16 +386,21 @@ class LoveLetterGame(BoxLayout):
         with btn.canvas.before:
             Color(0.9, 0.8, 0.3, 0.22 if not is_disabled else 0.08)
             border_rect = RoundedRectangle(pos=btn.pos, size=btn.size, radius=[14])
+
         def update_border_rect(inst, val, rect=border_rect):
             rect.pos = inst.pos
             rect.size = inst.size
+
         btn.bind(pos=update_border_rect, size=update_border_rect)
+
         def on_press(inst):
             if not is_disabled:
                 inst.background_color = (0.4, 0.18, 0.18, 1)
+
         def on_release(inst):
             if not is_disabled:
                 inst.background_color = (0.25, 0.08, 0.08, 0.92)
+
         btn.bind(on_press=on_press, on_release=on_release)
         btn.bind(on_release=on_press_callback)
         return btn
@@ -356,11 +429,12 @@ class LoveLetterGame(BoxLayout):
             widgets_to_check.append(self.opponents_grid)
             widgets_to_check.extend(self.opponents_grid.children[:])
         for widget in widgets_to_check:
-            if hasattr(widget, 'canvas') and hasattr(widget.canvas, 'before') and hasattr(widget.canvas.before, 'children'):
+            if hasattr(widget, 'canvas') and hasattr(widget.canvas, 'before') and hasattr(widget.canvas.before,
+                                                                                          'children'):
                 instructions_to_remove = [
                     instruction for instruction in widget.canvas.before.children
                     if (isinstance(instruction, Rectangle) or isinstance(instruction, RoundedRectangle))
-                    and not hasattr(widget, '_update_rect')
+                       and not hasattr(widget, '_update_rect')
                 ]
                 for instruction in instructions_to_remove:
                     widget.canvas.before.remove(instruction)
@@ -387,7 +461,7 @@ class LoveLetterGame(BoxLayout):
             Color(*card_color, 0.9)
             header_bg = RoundedRectangle(radius=[5, 5, 0, 0])
         header.bind(pos=lambda inst, val: self._update_rect(header, val),
-                  size=lambda inst, val: self._update_rect(header, val))
+                    size=lambda inst, val: self._update_rect(header, val))
         name_row = BoxLayout(orientation='horizontal')
         name_box = BoxLayout(orientation='vertical', size_hint_x=0.7)
         card_name_label = StyledLabel(
@@ -411,7 +485,7 @@ class LoveLetterGame(BoxLayout):
             name_box.add_widget(viet_name_label)
         value_box = BoxLayout(orientation='vertical', size_hint_x=0.3)
         value_label = StyledLabel(
-            text=f"Value: {card_data.value}",
+            text=f"Giá trị: {card_data.value}",
             font_size=20,
             bold=True,
             color=(1, 1, 1, 1),
@@ -429,7 +503,7 @@ class LoveLetterGame(BoxLayout):
             Color(0.15, 0.15, 0.2, 0.8)
             image_bg = RoundedRectangle(radius=[5])
         image_frame.bind(pos=lambda inst, val: self._update_rect(image_frame, val),
-                       size=lambda inst, val: self._update_rect(image_frame, val))
+                         size=lambda inst, val: self._update_rect(image_frame, val))
         card_image = Image(
             source=card_data.image_path,
             allow_stretch=True,
@@ -440,10 +514,10 @@ class LoveLetterGame(BoxLayout):
         image_frame.add_widget(card_image)
         content.add_widget(image_frame)
         effect_panel = BoxLayout(orientation='vertical',
-                            size_hint_x=0.6,
-                            spacing=10)
+                                 size_hint_x=0.6,
+                                 spacing=10)
         effect_title = StyledLabel(
-            text="Effect:",
+            text="Hiệu ứng:",
             font_size=22,
             bold=True,
             color=(0.9, 0.8, 0.3, 1),
@@ -458,7 +532,7 @@ class LoveLetterGame(BoxLayout):
             Color(0.15, 0.15, 0.2, 0.6)
             RoundedRectangle(pos=effect_box.pos, size=effect_box.size, radius=[5])
         effect_box.bind(pos=lambda inst, val: self._update_rect(effect_box, val),
-                      size=lambda inst, val: self._update_rect(effect_box, val))
+                        size=lambda inst, val: self._update_rect(effect_box, val))
         effect_scroll = ScrollView(do_scroll_x=False)
         effect_text = StyledLabel(
             text=card_data.description,
@@ -480,7 +554,7 @@ class LoveLetterGame(BoxLayout):
         footer = BoxLayout(orientation='horizontal', size_hint_y=0.1, padding=[15, 10])
         footer.add_widget(Widget(size_hint_x=0.35))
         close_btn = Button(
-            text="Close",
+            text="Đóng",
             size_hint=(0.3, 0.8),
             background_color=(*card_color, 1.0),
             font_size=18,
@@ -492,7 +566,7 @@ class LoveLetterGame(BoxLayout):
         footer.add_widget(Widget(size_hint_x=0.35))
         popup_layout.add_widget(footer)
         self.active_popup = Popup(
-            title="Card Information",
+            title="Thông tin lá bài",
             content=popup_layout,
             size_hint=(0.85, 0.8),
             title_color=(0.9, 0.9, 0.7, 1),
@@ -508,14 +582,15 @@ class LoveLetterGame(BoxLayout):
         CARD_PROTOTYPES.clear()
         missing_card_back = not os.path.exists(CARD_BACK_IMAGE)
         if missing_card_back:
-            self.log_message(f"CRITICAL ERROR: Card back image not found at {CARD_BACK_IMAGE}", permanent=True)
+            self.log_message(f"LỖI NGHIÊM TRỌNG: Không tìm thấy ảnh mặt sau lá bài tại {CARD_BACK_IMAGE}",
+                             permanent=True)
         for eng_name, data in CARDS_DATA_RAW.items():
             viet_name = data['vietnamese_name']
             path_jpg = os.path.join(CARD_FOLDER, f"{viet_name}.jpg")
             path_png = os.path.join(CARD_FOLDER, f"{viet_name}.png")
             actual_path = next((p for p in [path_jpg, path_png] if os.path.exists(p)), None)
             if not actual_path:
-                self.log_message(f"Warning: Image for '{eng_name}' ({viet_name}) not found. Using card back.",
+                self.log_message(f"Cảnh báo: Không tìm thấy ảnh cho '{eng_name}' ({viet_name}). Sử dụng ảnh mặt sau.",
                                  permanent=True)
                 actual_path = CARD_BACK_IMAGE if not missing_card_back else ""
             CARD_PROTOTYPES[eng_name] = Card(
@@ -527,13 +602,13 @@ class LoveLetterGame(BoxLayout):
                 count_classic=data['count_classic'],
                 count_large=data['count_large']
             )
-        self.log_message(f"Card prototypes loaded: {len(CARD_PROTOTYPES)} card types", permanent=True)
+        self.log_message(f"Đã tải {len(CARD_PROTOTYPES)} loại lá bài.", permanent=True)
 
     def setup_ui_placeholders(self):
         self.clear_widgets()
         welcome_layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
         title_label = StyledLabel(
-            text="Love Letter Board Game",
+            text="Board Game Thư Tình",
             font_size=32,
             color=(0.9, 0.7, 0.8, 1),
             size_hint_y=0.3
@@ -554,7 +629,7 @@ class LoveLetterGame(BoxLayout):
         self.add_widget(welcome_layout)
 
     def prompt_player_count(self):
-        self.game_log = ["Welcome to Love Letter Kivy!", "Please select number of players (2-4)."]
+        self.game_log = ["Chào mừng đến với Thư Tình (Kivy)!", "Vui lòng chọn số người chơi (2-4)."]
         if hasattr(self, 'message_label'):
             self.log_message("", permanent=False)
         popup_layout = BoxLayout(orientation='vertical', spacing=20, padding=[30, 30, 30, 30])
@@ -594,18 +669,22 @@ class LoveLetterGame(BoxLayout):
             with btn.canvas.before:
                 Color(0.9, 0.8, 0.3, 0.18)
                 border_rect = RoundedRectangle(pos=btn.pos, size=btn.size, radius=[18])
+
             def update_border_rect(inst, val, rect=border_rect):
                 rect.pos = inst.pos
                 rect.size = inst.size
+
             btn.bind(pos=update_border_rect, size=update_border_rect)
             btn.player_count = i
             btn.bind(on_press=self.initialize_game_with_player_count)
             options_layout.add_widget(btn)
         popup_layout.add_widget(options_layout)
+
         class DarkPopup(Popup):
             pass
+
         self.active_popup = DarkPopup(
-            title="Love Letter - Player Count",
+            title="Thư Tình - Chọn số người chơi",
             content=popup_layout,
             size_hint=(0.55, 0.38),
             auto_dismiss=False,
@@ -622,33 +701,37 @@ class LoveLetterGame(BoxLayout):
             self.active_popup.dismiss()
             self.active_popup = None
         self.num_players_session = instance.player_count
-        self.log_message(f"Number of players set to: {self.num_players_session}")
+        self.log_message(f"Số người chơi được đặt là: {self.num_players_session}")
         if self.num_players_session == 2:
             self.tokens_to_win_session = 7
         elif self.num_players_session == 3:
             self.tokens_to_win_session = 5
         else:
             self.tokens_to_win_session = 4
-        self.log_message(f"Tokens needed to win: {self.tokens_to_win_session}")
-        self.players_session_list = [Player(id_num=0, name="Player 1 (You)")]
+        self.log_message(f"Số tín vật cần để chiến thắng: {self.tokens_to_win_session}")
+        self.players_session_list = [Player(id_num=0, name="Người chơi 1 (Bạn)")]
         self.human_player_id = self.players_session_list[0].id
         for i in range(1, self.num_players_session):
-            self.players_session_list.append(Player(id_num=i, name=f"CPU {i}", is_cpu=True))
+            self.players_session_list.append(Player(id_num=i, name=f"Máy {i}", is_cpu=True))
         self.setup_main_ui()
         self.start_new_game_session()
 
     def setup_main_ui(self):
         self.clear_widgets()
+        # Adjusted main layout proportions to fill space left by the action button
         top_section = BoxLayout(size_hint_y=0.17, orientation='vertical', spacing=5)
-        info_bar = BoxLayout(size_hint_y=None, height=40, padding=[10, 5])
+        game_area = BoxLayout(orientation='vertical', spacing=15, size_hint_y=0.83)  # Increased from 0.7
+
+        # --- Top Section (Log, Scores) ---
+        info_bar = BoxLayout(size_hint_y=None, height=40, padding=[10, 5], spacing=10)
         with info_bar.canvas.before:
             Color(0.32, 0.13, 0.13, 0.92)
-            info_bar_bg = RoundedRectangle(radius=[10,])
+            info_bar_bg = RoundedRectangle(radius=[10, ])
         info_bar.bind(pos=lambda inst, val: self._update_rect(info_bar, val),
-                    size=lambda inst, val: self._update_rect(info_bar, val))
+                      size=lambda inst, val: self._update_rect(info_bar, val))
         self.score_label = StyledLabel(
-            text="Scores:",
-            size_hint_x=0.7,
+            text="Điểm số:",
+            size_hint_x=0.6,
             halign='left',
             valign='middle',
             font_size=16,
@@ -656,9 +739,20 @@ class LoveLetterGame(BoxLayout):
             color=(0.95, 0.9, 0.7, 1)
         )
         self.score_label.bind(size=self.score_label.setter('text_size'))
+
+        rules_btn = Button(
+            text="Luật chơi",
+            size_hint_x=0.15,
+            background_normal='',
+            background_color=(0.4, 0.45, 0.6, 0.9),
+            font_size=15,
+            bold=True,
+        )
+        rules_btn.bind(on_press=self.show_card_rules_popup)
+
         self.turn_label = StyledLabel(
-            text="Game Over",
-            size_hint_x=0.3,
+            text="Kết thúc",
+            size_hint_x=0.25,
             halign='right',
             valign='middle',
             color=(1, 0.85, 0.3, 1),
@@ -666,15 +760,18 @@ class LoveLetterGame(BoxLayout):
             bold=True
         )
         self.turn_label.bind(size=self.turn_label.setter('text_size'))
+
         info_bar.add_widget(self.score_label)
+        info_bar.add_widget(rules_btn)
         info_bar.add_widget(self.turn_label)
         top_section.add_widget(info_bar)
+
         log_container = BoxLayout(size_hint_y=1, padding=[10, 5])
         with log_container.canvas.before:
             Color(0.22, 0.09, 0.09, 0.85)
-            log_container_bg = RoundedRectangle(radius=[10,])
+            log_container_bg = RoundedRectangle(radius=[10, ])
         log_container.bind(pos=lambda inst, val: self._update_rect(log_container, val),
-                         size=lambda inst, val: self._update_rect(log_container, val))
+                           size=lambda inst, val: self._update_rect(log_container, val))
         log_scroll_view = ScrollView(size_hint_y=1)
         self.message_label = Label(
             text="\n".join(self.game_log),
@@ -691,16 +788,18 @@ class LoveLetterGame(BoxLayout):
         log_container.add_widget(log_scroll_view)
         top_section.add_widget(log_container)
         self.add_widget(top_section)
-        game_area = BoxLayout(orientation='vertical', spacing=15, size_hint_y=0.7)
+
+        # --- Game Area (Players, Deck, Hand) ---
         opponents_header = BoxLayout(size_hint_y=None, height=35, padding=[10, 0])
         with opponents_header.canvas.before:
             Color(0.32, 0.13, 0.13, 0.92)
-            opponents_header_bg = RoundedRectangle(pos=opponents_header.pos, size=opponents_header.size, radius=[10, 10, 0, 0])
+            opponents_header_bg = RoundedRectangle(pos=opponents_header.pos, size=opponents_header.size,
+                                                   radius=[10, 10, 0, 0])
         opponents_header.bind(pos=lambda inst, val: self._update_rect(opponents_header, val),
-                            size=lambda inst, val: self._update_rect(opponents_header, val))
+                              size=lambda inst, val: self._update_rect(opponents_header, val))
         opponents_header.add_widget(Widget(size_hint_x=0.08))
         opponents_header.add_widget(StyledLabel(
-            text="Opponents",
+            text="Đối thủ",
             size_hint_x=0.92,
             size_hint_y=None,
             height=35,
@@ -714,7 +813,7 @@ class LoveLetterGame(BoxLayout):
             Color(0.18, 0.07, 0.07, 0.92)
             self.opponents_bg = RoundedRectangle(radius=[0, 0, 10, 10])
         opponents_container.bind(pos=lambda inst, val: self._update_rect(opponents_container, val),
-                               size=lambda inst, val: self._update_rect(opponents_container, val))
+                                 size=lambda inst, val: self._update_rect(opponents_container, val))
         self.opponents_area_scrollview = ScrollView(size_hint=(1, 1))
         self.opponents_grid = GridLayout(
             cols=min(3, self.num_players_session - 1),
@@ -734,10 +833,10 @@ class LoveLetterGame(BoxLayout):
             Color(0.32, 0.13, 0.13, 0.92)
             player_header_bg = RoundedRectangle(radius=[10, 10, 0, 0])
         player_header.bind(pos=lambda inst, val: self._update_rect(player_header, val),
-                         size=lambda inst, val: self._update_rect(player_header, val))
+                           size=lambda inst, val: self._update_rect(player_header, val))
         player_header.add_widget(Widget(size_hint_x=0.08))
         player_header.add_widget(StyledLabel(
-            text="Your Hand (Click to Play)",
+            text="Bài của bạn (Nhấn để chơi)",
             size_hint_x=0.92,
             size_hint_y=None,
             height=35,
@@ -751,7 +850,7 @@ class LoveLetterGame(BoxLayout):
             Color(0.18, 0.07, 0.07, 0.92)
             player_hand_bg = RoundedRectangle(radius=[0, 0, 10, 10])
         player_hand_container.bind(pos=lambda inst, val: self._update_rect(player_hand_container, val),
-                                 size=lambda inst, val: self._update_rect(player_hand_container, val))
+                                   size=lambda inst, val: self._update_rect(player_hand_container, val))
         self.player_hand_area = BoxLayout(orientation='horizontal', spacing=20, padding=[20, 15])
         player_hand_container.add_widget(self.player_hand_area)
         self.human_player_display_wrapper.add_widget(player_hand_container)
@@ -759,7 +858,7 @@ class LoveLetterGame(BoxLayout):
         center_game_area = BoxLayout(size_hint_y=0.2, spacing=10, padding=[10, 5])
         left_area = BoxLayout(orientation='vertical', size_hint_x=0.25)
         left_area.add_widget(StyledLabel(
-            text="Deck",
+            text="Chồng bài",
             size_hint_y=0.2,
             font_size=16,
             color=(0.9, 0.9, 0.7, 1)
@@ -773,7 +872,7 @@ class LoveLetterGame(BoxLayout):
                 keep_ratio=True,
                 size_hint=(0.8, 0.8),
                 pos_hint={'center_x': 0.5 - 0.02 * offset, 'center_y': 0.5 - 0.02 * offset},
-                opacity=0.5 - 0.15*i
+                opacity=0.5 - 0.15 * i
             )
             deck_display.add_widget(shadow_card)
         self.deck_image = Image(
@@ -786,7 +885,7 @@ class LoveLetterGame(BoxLayout):
         deck_display.add_widget(self.deck_image)
         left_area.add_widget(deck_display)
         self.deck_count_label = StyledLabel(
-            text="0 cards",
+            text="0 lá",
             size_hint_y=0.2,
             font_size=14,
             color=(0.9, 0.9, 0.7, 1)
@@ -804,9 +903,9 @@ class LoveLetterGame(BoxLayout):
         played_card_frame = BoxLayout(size_hint_y=0.8, padding=[10, 5])
         with played_card_frame.canvas.before:
             Color(0.7, 0.6, 0.2, 0.22)
-            played_card_bg = RoundedRectangle(radius=[10,])
+            played_card_bg = RoundedRectangle(radius=[10, ])
         played_card_frame.bind(pos=lambda inst, val: self._update_rect(played_card_frame, val),
-                             size=lambda inst, val: self._update_rect(played_card_frame, val))
+                               size=lambda inst, val: self._update_rect(played_card_frame, val))
         self.last_played_card_container = RelativeLayout(size_hint=(1, 1))
         self.last_played_card_image = Image(
             source=EMPTY_CARD_IMAGE,
@@ -829,9 +928,9 @@ class LoveLetterGame(BoxLayout):
         game_info_frame = BoxLayout(orientation='vertical', size_hint_y=0.8)
         with game_info_frame.canvas.before:
             Color(0.1, 0.15, 0.2, 0.5)
-            game_info_bg = RoundedRectangle(radius=[10,])
+            game_info_bg = RoundedRectangle(radius=[10, ])
         game_info_frame.bind(pos=lambda inst, val: self._update_rect(game_info_frame, val),
-                           size=lambda inst, val: self._update_rect(game_info_frame, val))
+                             size=lambda inst, val: self._update_rect(game_info_frame, val))
         self.round_info_label = StyledLabel(
             text="Vòng đấu đang diễn ra",
             font_size=12,
@@ -854,9 +953,11 @@ class LoveLetterGame(BoxLayout):
         center_game_area.add_widget(right_area)
         game_area.add_widget(center_game_area)
         self.add_widget(game_area)
+
+        # --- Action Button (Bottom) ---
         button_container = BoxLayout(size_hint_y=None, height=60, padding=[100, 0])
         self.action_button = Button(
-            text="Start New Game Session",
+            text="Bắt đầu ván mới",
             size_hint=(1, 0.9),
             pos_hint={'center_y': 0.5},
             background_color=(0.4, 0.6, 0.9, 1),
@@ -866,7 +967,11 @@ class LoveLetterGame(BoxLayout):
         )
         self.action_button.bind(on_press=self.on_press_action_button)
         button_container.add_widget(self.action_button)
-        self.add_widget(button_container)
+        # Add a wrapper for the button to control its height correctly
+        bottom_bar = BoxLayout(size_hint_y=None, height=dp(65), padding=(0, dp(5), 0, 0))
+        bottom_bar.add_widget(button_container)
+        self.add_widget(bottom_bar)
+
         self.update_ui_full()
 
     def log_message(self, msg, permanent=True):
@@ -893,20 +998,28 @@ class LoveLetterGame(BoxLayout):
         if self.current_round_manager and self.current_round_manager.round_active:
             is_round_active_for_ui = True
             current_player_name_round = self.players_session_list[self.current_round_manager.current_player_idx].name
+
         if self.game_over_session_flag:
-            self.turn_label.text = "Game Over!"
-            self.action_button.text = "Start New Game Session"
+            self.turn_label.text = "Trò chơi kết thúc!"
+            self.action_button.text = "Bắt đầu ván mới"
             self.action_button.background_color = (0.4, 0.6, 0.9, 1)
+            self.action_button.disabled = False
+            self.action_button.opacity = 1
         elif not is_round_active_for_ui:
-            self.turn_label.text = "Round Over"
-            self.action_button.text = "Start Next Round"
+            self.turn_label.text = "Vòng đấu kết thúc"
+            self.action_button.text = "Bắt đầu vòng tiếp theo"
             self.action_button.background_color = (0.5, 0.7, 0.3, 1)
+            self.action_button.disabled = False
+            self.action_button.opacity = 1
         else:
-            self.turn_label.text = f"Turn: {current_player_name_round}"
-            self.action_button.text = "Forfeit Round (DEBUG)"
-            self.action_button.background_color = (0.8, 0.3, 0.3, 1)
+            self.turn_label.text = f"Lượt của: {current_player_name_round}"
+            # Hide the button during a player's turn instead of showing "Forfeit"
+            self.action_button.text = ""
+            self.action_button.disabled = True
+            self.action_button.opacity = 0
+
         if self.current_round_manager and self.current_round_manager.deck:
-            self.deck_count_label.text = f"{self.current_round_manager.deck.count()}"
+            self.deck_count_label.text = f"{self.current_round_manager.deck.count()} lá"
             self.deck_image.source = CARD_BACK_IMAGE if not self.current_round_manager.deck.is_empty() else EMPTY_CARD_IMAGE
             self.deck_image.opacity = 1.0 if not self.current_round_manager.deck.is_empty() else 0.3
             active_players = sum(1 for p in self.players_session_list if not p.is_eliminated)
@@ -918,7 +1031,7 @@ class LoveLetterGame(BoxLayout):
             else:
                 self.round_info_label.text = "Vòng đấu kết thúc"
         else:
-            self.deck_count_label.text = "0"
+            self.deck_count_label.text = "0 lá"
             self.deck_image.source = EMPTY_CARD_IMAGE
             self.deck_image.opacity = 0.3
             self.round_info_label.text = "Không có vòng đấu"
@@ -947,7 +1060,7 @@ class LoveLetterGame(BoxLayout):
                 pos_hint={'center_x': 0.5, 'center_y': 0.5}
             )
             self.last_played_card_container.add_widget(card_button)
-            player_name = last_played_by.name if last_played_by else "Unknown"
+            player_name = last_played_by.name if last_played_by else "Không rõ"
             self.last_played_title.text = f"Bài của: {player_name}"
         else:
             empty_card = Image(
@@ -981,21 +1094,7 @@ class LoveLetterGame(BoxLayout):
                 width=160,
                 padding=[8, 8, 8, 8]
             )
-            # with opponent_container.canvas.before:
-            #     Color(0.3, 0.3, 0.4, 0.9)
-            #     RoundedRectangle(
-            #         pos=(opponent_container.pos[0]-2, opponent_container.pos[1]-2),
-            #         size=(opponent_container.size[0]+4, opponent_container.size[1]+4),
-            #         radius=[15,]
-            #     )
-            #     if p_opponent.is_eliminated:
-            #         Color(0.4, 0.08, 0.08, 0.85)
-            #     elif p_opponent.is_protected:
-            #         Color(0.18, 0.13, 0.18, 0.85)
-            #     else:
-            #         Color(0.18, 0.07, 0.07, 0.92)
-            #     RoundedRectangle(radius=[15,])
-            # opponent_container.bind(pos=self._update_rect, size=self._update_rect)
+
             name_box = BoxLayout(size_hint_y=0.15)
             with name_box.canvas.before:
                 if p_opponent.is_eliminated:
@@ -1007,7 +1106,7 @@ class LoveLetterGame(BoxLayout):
                 RoundedRectangle(radius=[10, 10, 0, 0])
             name_box.bind(pos=self._update_rect, size=self._update_rect)
             token_text = f"{p_opponent.name}"
-            status_text = " [E]" if p_opponent.is_eliminated else " [P]" if p_opponent.is_protected else ""
+            status_text = " [Bị loại]" if p_opponent.is_eliminated else " [An toàn]" if p_opponent.is_protected else ""
             name_label = StyledLabel(
                 text=token_text + status_text,
                 font_size='13sp',
@@ -1046,7 +1145,7 @@ class LoveLetterGame(BoxLayout):
             card_box.add_widget(card_image)
             opponent_container.add_widget(card_box)
             discard_box = BoxLayout(orientation='vertical', size_hint_y=0.3)
-            discard_box.add_widget(StyledLabel(text="Discard", font_size='10sp', size_hint_y=0.3))
+            discard_box.add_widget(StyledLabel(text="Bài bỏ", font_size='10sp', size_hint_y=0.3))
             if p_opponent.discard_pile:
                 discard_card = p_opponent.discard_pile[-1]
                 discard_image = ImageButton(
@@ -1075,18 +1174,18 @@ class LoveLetterGame(BoxLayout):
         self.player_hand_area.clear_widgets()
         if human_player.is_eliminated:
             self.player_hand_area.add_widget(Image(source=ELIMINATED_IMAGE, allow_stretch=True))
-            self.player_hand_area.add_widget(StyledLabel(text="Eliminated!", color=(1, 0.5, 0.5, 1), font_size=24))
+            self.player_hand_area.add_widget(StyledLabel(text="Đã bị loại!", color=(1, 0.5, 0.5, 1), font_size=24))
             return
         if not human_player.hand:
             return
         is_player_turn_active = (
-            self.current_round_manager and
-            self.current_round_manager.round_active and
-            self.current_round_manager.current_player_idx == self.human_player_id and
-            not self.waiting_for_input
+                self.current_round_manager and
+                self.current_round_manager.round_active and
+                self.current_round_manager.current_player_idx == self.human_player_id and
+                not self.waiting_for_input
         )
         token_label = StyledLabel(
-            text="Token: " + "*" * human_player.tokens + "-" * (self.tokens_to_win_session - human_player.tokens),
+            text="Tín vật: " + "*" * human_player.tokens + "-" * (self.tokens_to_win_session - human_player.tokens),
             font_size='15sp',
             color=(1, 0.95, 0.5, 1),
             bold=True
@@ -1098,23 +1197,16 @@ class LoveLetterGame(BoxLayout):
                 size_hint=(1 / len(human_player.hand) if len(human_player.hand) > 0 else 1, 1),
                 padding=[10, 10, 10, 5]
             )
-            # if is_player_turn_active:
-            #     with card_container.canvas.before:
-            #         Color(0.2, 0.4, 0.3, 0.4)
-            #         RoundedRectangle(
-            #             pos=(card_container.pos[0]+4, card_container.pos[1]-4),
-            #             size=card_container.size,
-            #             radius=[8,]
-            #         )
+
             card_frame = BoxLayout(padding=[2, 2, 2, 2])
             with card_frame.canvas.before:
                 if is_player_turn_active:
                     Color(0.9, 0.8, 0.3, 0.8)
                 else:
                     Color(0.4, 0.4, 0.5, 0.4)
-                RoundedRectangle(radius=[5,])
+                RoundedRectangle(radius=[5, ])
             card_frame.bind(pos=lambda inst, val: self._update_rect(inst, val),
-                        size=lambda inst, val: self._update_rect(inst, val))
+                            size=lambda inst, val: self._update_rect(inst, val))
             card_button = ImageButton(
                 source=card_obj.image_path,
                 card_info_callback=self.display_card_info_popup,
@@ -1154,17 +1246,12 @@ class LoveLetterGame(BoxLayout):
             instance.canvas_anim_bg_rect.size = instance.size
 
     def on_press_action_button(self, instance):
+        if instance.disabled:
+            return
         if self.game_over_session_flag:
             self.prompt_player_count()
         elif self.current_round_manager and not self.current_round_manager.round_active:
             self.start_new_round()
-        else:
-            if self.current_round_manager and self.current_round_manager.round_active and \
-                    self.current_round_manager.current_player_idx == self.human_player_id:
-                self.log_message(f"{self.players_session_list[self.human_player_id].name} forfeits the round.")
-                self.log_message("DEBUG: Forfeit currently complex to reimplement cleanly. Ignored.")
-            else:
-                self.log_message("Cannot forfeit now.")
 
     def ui_animate_effect(self, effect_details, duration=1.0, on_complete_callback=None):
         self.dismiss_active_popup()
@@ -1237,16 +1324,16 @@ class LoveLetterGame(BoxLayout):
             on_complete_callback()
 
     def start_new_game_session(self):
-        self.log_message(f"--- Starting New Game Session with {self.num_players_session} players ---")
+        self.log_message(f"--- Bắt đầu ván chơi mới với {self.num_players_session} người chơi ---")
         for p in self.players_session_list:
             p.tokens = 0
         self.game_over_session_flag = False
         self.start_new_round()
 
     def start_new_round(self):
-        self.log_message("--- UI: Preparing New Round ---")
+        self.log_message("--- Giao diện: Chuẩn bị vòng mới ---")
         if self.game_over_session_flag:
-            self.log_message("Game is over. Cannot start new round until new game session.")
+            self.log_message("Trò chơi đã kết thúc. Không thể bắt đầu vòng mới cho đến khi có ván chơi mới.")
             self.update_ui_full()
             return
         game_deck = Deck(self.num_players_session, self.log_message)
@@ -1254,7 +1341,7 @@ class LoveLetterGame(BoxLayout):
         min_cards_needed = self.num_players_session
         if game_deck.count() < min_cards_needed:
             self.log_message(
-                f"Error: Not enough cards in deck ({game_deck.count()}) for {self.num_players_session} players. Needs {min_cards_needed}."
+                f"Lỗi: Không đủ bài trong chồng bài ({game_deck.count()}) cho {self.num_players_session} người chơi. Cần {min_cards_needed}."
             )
             self.game_over_session_flag = True
             self.update_ui_full()
@@ -1265,12 +1352,13 @@ class LoveLetterGame(BoxLayout):
             'get_active_popup_callback': lambda: self.active_popup,
             'dismiss_active_popup_callback': self.dismiss_active_popup,
             'request_target_selection_callback': self.ui_display_target_selection_popup,
+            'request_confirmation_popup_callback': self.ui_display_confirmation_popup,
             'request_guard_value_popup_callback': self.ui_display_guard_value_popup,
             'award_round_tokens_callback': self.award_round_tokens_and_check_game_over,
             'check_game_over_token_callback': self.check_game_over_on_token_gain,
             'game_over_callback': self.handle_game_over_from_round,
             'animate_effect_callback': self.ui_animate_effect,
-            'show_turn_notification_callback': self.show_turn_notification,  # ADD THIS LINE
+            'show_turn_notification_callback': self.show_turn_notification,
         }
         self.current_round_manager = GameRound(
             self.players_session_list,
@@ -1314,7 +1402,7 @@ class LoveLetterGame(BoxLayout):
         return popup_layout, scroll_content
 
     def ui_display_target_selection_popup(self, acting_player_obj, card_played_obj, valid_targets_list,
-                                        continuation_callback_in_gameround):
+                                          continuation_callback_in_gameround, cancel_callback_in_gameround):
         self.dismiss_active_popup()
         self.set_waiting_for_input_flag(True)
         popup_layout = BoxLayout(orientation='vertical', spacing=24, padding=[36, 36, 36, 36])
@@ -1328,7 +1416,7 @@ class LoveLetterGame(BoxLayout):
         header_box.add_widget(card_image)
         info_box = BoxLayout(orientation='vertical', size_hint_x=0.78)
         info_box.add_widget(StyledLabel(
-            text=f"{card_played_obj.name} (Value: {card_played_obj.value})",
+            text=f"{card_played_obj.name} (Giá trị: {card_played_obj.value})",
             font_size=20,
             color=(1, 0.92, 0.7, 1)
         ))
@@ -1352,18 +1440,98 @@ class LoveLetterGame(BoxLayout):
         for target in valid_targets_list:
             btn_text = f"{target.name}"
             if target == acting_player_obj:
-                btn_text += " (Yourself)"
+                btn_text += " (Chính mình)"
+
             def make_callback(inst, ap=acting_player_obj, tid=target.id):
                 self.dismiss_active_popup()
                 continuation_callback_in_gameround(ap, tid)
+
             btn = self.create_selection_button(btn_text, make_callback)
             target_grid.add_widget(btn)
         scroll_view.add_widget(target_grid)
         popup_layout.add_widget(scroll_view)
+
+        cancel_btn = self.create_selection_button(
+            "Quay lại (Chọn lá khác)",
+            lambda inst: cancel_callback_in_gameround(acting_player_obj)
+        )
+        cancel_btn.background_color = (0.7, 0.2, 0.2, 0.92)
+        cancel_btn.bind(
+            on_press=lambda inst: setattr(inst, 'background_color', (0.85, 0.3, 0.3, 1)),
+            on_release=lambda inst: setattr(inst, 'background_color', (0.7, 0.2, 0.2, 0.92))
+        )
+        popup_layout.add_widget(cancel_btn)
+
         self.active_popup = Popup(
-            title=f"{card_played_obj.name} Target Selection",
+            title=f"Chọn mục tiêu cho {card_played_obj.name}",
             content=popup_layout,
-            size_hint=(0.8, 0.8),
+            size_hint=(0.8, 0.85),
+            auto_dismiss=False,
+            title_color=(1, 0.9, 0.7, 1),
+            title_size='20sp',
+            title_align='center',
+            separator_color=(0.9, 0.8, 0.3, 0.4),
+            background_color=(0.18, 0.07, 0.07, 0.98)
+        )
+        self.active_popup.open()
+
+    def ui_display_confirmation_popup(self, acting_player_obj, card_played_obj,
+                                      continuation_callback_in_gameround, cancel_callback_in_gameround):
+        self.dismiss_active_popup()
+        self.set_waiting_for_input_flag(True)
+
+        popup_layout = BoxLayout(orientation='vertical', spacing=24, padding=[36, 36, 36, 36])
+        header_box = BoxLayout(size_hint_y=0.6, spacing=18)
+        card_image = Image(
+            source=card_played_obj.image_path,
+            size_hint_x=0.35,
+            allow_stretch=True,
+            keep_ratio=True
+        )
+        header_box.add_widget(card_image)
+        info_box = BoxLayout(orientation='vertical', size_hint_x=0.65)
+        info_box.add_widget(StyledLabel(
+            text=f"{card_played_obj.name} (Giá trị: {card_played_obj.value})",
+            font_size=20,
+            color=(1, 0.92, 0.7, 1)
+        ))
+        info_box.add_widget(StyledLabel(
+            text=f"[b]Hiệu ứng:[/b] {card_played_obj.description}",
+            font_size=15,
+            markup=True,
+            color=(1, 1, 1, 0.85)
+        ))
+        header_box.add_widget(info_box)
+        popup_layout.add_widget(header_box)
+
+        button_box = BoxLayout(orientation='vertical', size_hint_y=0.4, spacing=15)
+        confirm_btn = self.create_selection_button(
+            f"Xác nhận chơi {card_played_obj.name}",
+            lambda inst: (self.dismiss_active_popup(), continuation_callback_in_gameround(acting_player_obj))
+        )
+        confirm_btn.background_color = (0.2, 0.5, 0.3, 0.92)
+        confirm_btn.bind(
+            on_press=lambda inst: setattr(inst, 'background_color', (0.3, 0.65, 0.4, 1)),
+            on_release=lambda inst: setattr(inst, 'background_color', (0.2, 0.5, 0.3, 0.92))
+        )
+        button_box.add_widget(confirm_btn)
+
+        cancel_btn = self.create_selection_button(
+            "Quay lại (Chọn lá khác)",
+            lambda inst: cancel_callback_in_gameround(acting_player_obj)
+        )
+        cancel_btn.background_color = (0.7, 0.2, 0.2, 0.92)
+        cancel_btn.bind(
+            on_press=lambda inst: setattr(inst, 'background_color', (0.85, 0.3, 0.3, 1)),
+            on_release=lambda inst: setattr(inst, 'background_color', (0.7, 0.2, 0.2, 0.92))
+        )
+        button_box.add_widget(cancel_btn)
+        popup_layout.add_widget(button_box)
+
+        self.active_popup = Popup(
+            title=f"Xác nhận chơi bài",
+            content=popup_layout,
+            size_hint=(0.7, 0.6),
             auto_dismiss=False,
             title_color=(1, 0.9, 0.7, 1),
             title_size='20sp',
@@ -1374,12 +1542,12 @@ class LoveLetterGame(BoxLayout):
         self.active_popup.open()
 
     def ui_display_guard_value_popup(self, acting_player_obj, target_player_obj, possible_values_list,
-                                continuation_callback_in_gameround):
+                                     continuation_callback_in_gameround, cancel_callback_in_gameround):
         self.dismiss_active_popup()
         self.set_waiting_for_input_flag(True)
         popup_layout = BoxLayout(orientation='vertical', spacing="15dp", padding="20dp")
         popup_layout.add_widget(StyledLabel(
-            text=f"Guard: Guess {target_player_obj.name}'s card value (not 1):",
+            text=f"Cận vệ: Đoán giá trị bài của {target_player_obj.name} (không phải 1):",
             font_size=18,
             color=(1, 0.9, 0.7, 1),
             size_hint_y=None,
@@ -1390,13 +1558,26 @@ class LoveLetterGame(BoxLayout):
             def make_callback(inst, ap=acting_player_obj, tp=target_player_obj, v=val):
                 self.dismiss_active_popup()
                 continuation_callback_in_gameround(ap, tp, v)
+
             btn = self.create_selection_button(str(val), make_callback)
             options_grid.add_widget(btn)
         popup_layout.add_widget(options_grid)
+
+        cancel_btn = self.create_selection_button(
+            "Quay lại (Chọn lá khác)",
+            lambda inst: cancel_callback_in_gameround(acting_player_obj)
+        )
+        cancel_btn.background_color = (0.7, 0.2, 0.2, 0.92)
+        cancel_btn.bind(
+            on_press=lambda inst: setattr(inst, 'background_color', (0.85, 0.3, 0.3, 1)),
+            on_release=lambda inst: setattr(inst, 'background_color', (0.7, 0.2, 0.2, 0.92))
+        )
+        popup_layout.add_widget(cancel_btn)
+
         self.active_popup = Popup(
-            title="Guard Value Selection",
+            title="Chọn giá trị cho Cận vệ",
             content=popup_layout,
-            size_hint=(0.7, 0.5),
+            size_hint=(0.7, 0.6),
             auto_dismiss=False,
             title_color=(1, 0.9, 0.7, 1),
             title_size='20sp',
@@ -1409,7 +1590,7 @@ class LoveLetterGame(BoxLayout):
         victory_layout = BoxLayout(orientation='vertical', spacing=20, padding=30)
         with victory_layout.canvas.before:
             Color(0.2, 0.2, 0.3, 0.9)
-            RoundedRectangle(pos=victory_layout.pos, size=victory_layout.size, radius=[15,])
+            RoundedRectangle(pos=victory_layout.pos, size=victory_layout.size, radius=[15, ])
         victory_layout.bind(pos=self._update_rect, size=self._update_rect)
         title_label = StyledLabel(
             text=f"{winner.name} CHIẾN THẮNG!",
@@ -1426,8 +1607,7 @@ class LoveLetterGame(BoxLayout):
             pos_hint={'center_x': 0.5, 'center_y': 0.5}
         )
         image_box.add_widget(winner_image)
-        victory_layout.add_widget(image_box)
-        info_text = f"Đã giành được {winner.tokens} token tình yêu\nvà chinh phục trái tim của Công chúa!"
+        info_text = f"Đã giành được {winner.tokens} tín vật tình yêu\nvà chinh phục trái tim của Công chúa!"
         info_label = StyledLabel(
             text=info_text,
             font_size=22,
@@ -1467,7 +1647,7 @@ class LoveLetterGame(BoxLayout):
         for winner_of_round in list_of_winner_players:
             if winner_of_round is None:
                 continue
-            self.log_message(f"{winner_of_round.name} gains a token of affection for winning the round!")
+            self.log_message(f"{winner_of_round.name} nhận được một tín vật tình yêu vì đã thắng vòng này!")
             winner_of_round.tokens += 1
             is_victory = (winner_of_round.id == self.human_player_id)
             self.show_victory_defeat_effect(is_victory)
@@ -1488,17 +1668,19 @@ class LoveLetterGame(BoxLayout):
     def handle_game_over_from_round(self, winner_of_game):
         if self.game_over_session_flag:
             return
-        self.log_message(f"--- GAME OVER! {winner_of_game.name} wins the game with {winner_of_game.tokens} tokens! ---")
+        self.log_message(
+            f"--- TRÒ CHƠI KẾT THÚC! {winner_of_game.name} chiến thắng với {winner_of_game.tokens} tín vật! ---")
         self.game_over_session_flag = True
         if self.current_round_manager:
             self.current_round_manager.round_active = False
         self.update_ui_full()
         self.display_victory_screen(winner_of_game)
 
+
 class LoveLetterApp(App):
     def build(self):
         os.makedirs(CARD_FOLDER, exist_ok=True)
-        self.title = 'Love Letter Board Game'
+        self.title = 'Thư Tình Board Game'
         sm = ScreenManager(transition=FadeTransition(duration=0.5))
         self.game = LoveLetterGame()
         sm.add_widget(IntroScreen(name='intro'))
@@ -1510,11 +1692,13 @@ class LoveLetterApp(App):
         sm.add_widget(game_screen)
         return sm
 
+
 if __name__ == '__main__':
     os.makedirs(CARD_FOLDER, exist_ok=True)
     if not os.path.exists(CARD_BACK_IMAGE):
         try:
             from PIL import Image as PILImage, ImageDraw
+
             img = PILImage.new('RGB', (200, 300), color=(25, 40, 100))
             d = ImageDraw.Draw(img)
             d.text((10, 10), "CARD BACK", fill=(255, 255, 0))
@@ -1525,6 +1709,7 @@ if __name__ == '__main__':
     if not os.path.exists(ELIMINATED_IMAGE):
         try:
             from PIL import Image as PILImage, ImageDraw
+
             img = PILImage.new('RGB', (100, 150), color=(100, 20, 20))
             d = ImageDraw.Draw(img)
             d.text((10, 10), "ELIMINATED", fill=(255, 255, 255))
@@ -1535,11 +1720,28 @@ if __name__ == '__main__':
     if not os.path.exists(EMPTY_CARD_IMAGE):
         try:
             from PIL import Image as PILImage
+
             img = PILImage.new('RGBA', (200, 300), color=(0, 0, 0, 0))
             img.save(EMPTY_CARD_IMAGE)
             print(f"INFO: Created empty card image at {EMPTY_CARD_IMAGE}")
         except Exception as e:
             print(f"WARNING: Could not create empty card image: {e}")
+
+    # New check for the card rules image
+    if not os.path.exists(CARD_RULES_IMAGE):
+        try:
+            from PIL import Image as PILImage, ImageDraw
+
+            img = PILImage.new('RGB', (800, 1200), color=(20, 20, 30))
+            d = ImageDraw.Draw(img)
+            d.text((50, 50), "CARD RULES MANUAL - PLACEHOLDER", fill=(255, 255, 0))
+            d.text((50, 100), "Please replace this with the actual rules image at:", fill=(255, 255, 255))
+            d.text((50, 150), CARD_RULES_IMAGE, fill=(255, 255, 255))
+            img.save(CARD_RULES_IMAGE)
+            print(f"INFO: Created dummy rules image at {CARD_RULES_IMAGE}")
+        except Exception as e:
+            print(f"WARNING: Could not create dummy rules image: {e}")
+
     for card_name_key, card_detail_raw in CARDS_DATA_RAW.items():
         v_name = card_detail_raw['vietnamese_name']
         expected_path_png = os.path.join(CARD_FOLDER, f"{v_name}.png")
@@ -1547,8 +1749,9 @@ if __name__ == '__main__':
         if not os.path.exists(expected_path_png) and not os.path.exists(expected_path_jpg):
             try:
                 from PIL import Image as PILImage, ImageDraw
+
                 img = PILImage.new('RGB', (200, 300),
-                            color=(random.randint(50, 200), random.randint(50, 200), random.randint(50, 200)))
+                                   color=(random.randint(50, 200), random.randint(50, 200), random.randint(50, 200)))
                 d = ImageDraw.Draw(img)
                 d.text((10, 10), card_name_key, fill=(255, 255, 255))
                 d.text((10, 50), f"V:{card_detail_raw['value']}", fill=(255, 255, 255))
