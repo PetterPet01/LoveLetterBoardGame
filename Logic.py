@@ -557,6 +557,7 @@ class GameRound:
         if not target_player.hand: return
 
         target_card = target_player.hand[0]
+        title = f"{acting_player.name} plays Guard on {target_player.name}"
 
         if self._is_card_in_current_deck('Assassin') and target_card.name == 'Assassin':
             self.log_message(f"{target_player.name} reveals Assassin! {acting_player.name} is eliminated!")
@@ -575,10 +576,16 @@ class GameRound:
             return
 
         if target_card.value == guessed_value:
-            self.log_message(f"Correct! {target_player.name} had {target_card.name}. Eliminated.")
+            details = f"Correct! {target_player.name} had {target_card.name}. Eliminated."
+            self.log_message(details)
+            if 'show_turn_notification_callback' in self.ui:
+                self.ui['show_turn_notification_callback'](title, details)
             self._eliminate_player(target_player)
         else:
-            self.log_message(f"Incorrect guess. {target_player.name} did not have value {guessed_value}.")
+            details = f"Incorrect guess. {target_player.name} did not have a card with value {guessed_value}."
+            self.log_message(details)
+            if 'show_turn_notification_callback' in self.ui:
+                self.ui['show_turn_notification_callback'](title, details)
 
     def _effect_priest(self, player, card_played, must_target_self):
         valid_targets = self._get_valid_targets(player, include_self=False, targeted_effect_requires_unprotected=True)
@@ -610,14 +617,15 @@ class GameRound:
             return
 
         target_card_name = target_player.hand[0].name
-        if not acting_player.is_cpu:  # Human player
-            self.log_message(
-                f"You ({acting_player.name}) use Priest on {target_player.name} and see their {target_card_name}.")
-        elif not target_player.is_cpu:  # CPU on Human
-            self.log_message(f"{acting_player.name} (Priest) looks at your hand and sees your {target_card_name}.")
-        else:  # CPU on CPU
-            self.log_message(f"{acting_player.name} (Priest) looks at {target_player.name}'s hand.")
-            # AI would store this info: acting_player.remember_card(target_player.id, target_card_name)
+        title = f"{acting_player.name} plays Priest"
+        details = ""
+        if not acting_player.is_cpu:
+            details = f"You look at {target_player.name}'s hand and see their {target_card_name}."
+        else:
+            details = f"{acting_player.name} looks at {target_player.name}'s hand."
+        self.log_message(details)
+        if 'show_turn_notification_callback' in self.ui:
+            self.ui['show_turn_notification_callback'](title, details)
 
     def _effect_baron(self, player, card_played, must_target_self):
         valid_targets = self._get_valid_targets(player, include_self=False, targeted_effect_requires_unprotected=True)
@@ -649,22 +657,30 @@ class GameRound:
 
         player_card = player.hand[0]
         opponent_card = target_player.hand[0]
+        title = f"{player.name} plays Baron against {target_player.name}"
+        details = f"They compare hands: {player.name}'s {player_card.name} (V:{player_card.value}) vs {target_player.name}'s {opponent_card.name} (V:{opponent_card.value}). "
 
-        log_msg = f"{player.name}({player_card.name} V:{player_card.value}) vs {target_player.name}({opponent_card.name} V:{opponent_card.value}). "
         if player_card.value > opponent_card.value:
-            log_msg += f"{target_player.name} is eliminated."
+            details += f"{target_player.name} is eliminated."
             self._eliminate_player(target_player)
         elif opponent_card.value > player_card.value:
-            log_msg += f"{player.name} is eliminated."
+            details += f"{player.name} is eliminated."
             self._eliminate_player(player)
         else:
-            log_msg += "Tie. No one eliminated."
-        self.log_message(log_msg)
+            details += "It's a tie! No one is eliminated."
+
+        self.log_message(details)
+        if 'show_turn_notification_callback' in self.ui:
+            self.ui['show_turn_notification_callback'](title, details)
 
     def _effect_handmaid(self, player, card_played):
         player.is_protected = True
+        title = f"{player.name} plays Handmaid"
+        details = "They are protected from effects until their next turn."
         self.log_message(f"{player.name} plays Handmaid and is protected.")
-        return False  # No input needed
+        if 'show_turn_notification_callback' in self.ui:
+            self.ui['show_turn_notification_callback'](title, details)
+        return False
 
     def _effect_prince(self, player, card_played, must_target_self):
         valid_targets = []
@@ -707,7 +723,10 @@ class GameRound:
         if target_player.hand:
             original_hand_card = target_player.hand[0]
             discarded_card = target_player.force_discard(self.deck, self.shared_burned_card_ref)
-            self.log_message(f"{target_player.name} discards {discarded_card.name}.")
+            details = f"{target_player.name} is forced to discard their {discarded_card.name} and draw a new card."
+            self.log_message(details)
+            if 'show_turn_notification_callback' in self.ui:
+                self.ui['show_turn_notification_callback']("Prince Effect", details)
 
             if self._is_card_in_current_deck('Princess') and discarded_card.name == 'Princess':
                 self.log_message(f"{target_player.name} discarded Princess (forced by Prince) and is eliminated!")
@@ -766,11 +785,19 @@ class GameRound:
         player.add_card_to_hand(opponent_card_obj)
         target_player.add_card_to_hand(player_card_obj)
 
+        title = f"{player.name} plays King"
+        details = f"They swap hands with {target_player.name}. \n{player.name} receives a {opponent_card_obj.name}."
         self.log_message(f"{player.name} (King) swaps hand with {target_player.name}. "
                          f"{player.name} gets {opponent_card_obj.name}, {target_player.name} gets {player_card_obj.name}.")
+        if 'show_turn_notification_callback' in self.ui:
+            self.ui['show_turn_notification_callback'](title, details)
 
     def _effect_countess(self, player, card_played):
+        title = f"{player.name} plays Countess"
+        details = "A noble gesture, but with no direct effect on others."
         self.log_message("Countess played. No special effect.");
+        if 'show_turn_notification_callback' in self.ui:
+            self.ui['show_turn_notification_callback'](title, details)
         return False
 
     def _effect_princess(self, player, card_played):

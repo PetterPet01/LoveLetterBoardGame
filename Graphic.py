@@ -27,7 +27,7 @@ INTRO_BACKGROUND = "assets/chill.webp"
 RULES_BACKGROUND = "assets/Rules.png"
 EMPTY_CARD_IMAGE = "assets/cards/empty_card.png"
 
-from logic4 import (
+from Logic import (
     Player, Deck, GameRound, Card,
     CARD_PROTOTYPES, CARDS_DATA_RAW,
     CARD_FOLDER, CARD_BACK_IMAGE, ELIMINATED_IMAGE
@@ -109,16 +109,13 @@ class IntroScreen(Screen):
             size_hint=(0.95, 0.9),
             pos_hint={'center_x': 0.5, 'center_y': 0.5}
         )
-        
         def on_press(instance):
             instance.background_color = (0.9, 0.2, 0.2, 0.9)
             instance.font_size = 34
-            
         def on_release(instance):
             instance.background_color = (0.8, 0.1, 0.1, 0.85)
             instance.font_size = 32
             self.go_to_rules(instance)
-            
         start_button.bind(on_press=on_press)
         start_button.bind(on_release=on_release)
         button_container.add_widget(start_button)
@@ -164,6 +161,53 @@ class RulesScreen(Screen):
         if hasattr(self, 'game_instance') and self.game_instance:
             Clock.schedule_once(lambda dt: self.game_instance.initialize_game_setup(), 0.1)
 
+# --------Graphic.py-------- (Add this class)
+
+class TurnNotificationPopup(BoxLayout):
+    def __init__(self, title_text, detail_text, **kwargs):
+        super().__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.padding = dp(15)
+        self.spacing = dp(8)
+        self.size_hint = (None, None)
+        self.width = dp(450)
+        self.opacity = 0 # Start fully transparent
+
+        with self.canvas.before:
+            Color(0.1, 0.1, 0.15, 0.9) # Semi-transparent dark background
+            self.bg = RoundedRectangle(radius=[dp(12)])
+
+        self.bind(pos=self._update_rect, size=self._update_rect)
+
+        title_label = StyledLabel(
+            text=f"[b]{title_text}[/b]",
+            font_size='18sp',
+            color=(1, 0.85, 0.4, 1),
+            markup=True,
+            halign='center',
+            size_hint_y=None,
+            height=dp(30)
+        )
+        self.add_widget(title_label)
+
+        detail_label = StyledLabel(
+            text=detail_text,
+            font_size='15sp',
+            color=(0.95, 0.95, 1, 1),
+            halign='center'
+        )
+        # For text wrapping
+        detail_label.bind(width=lambda *x: detail_label.setter('text_size')(detail_label, (detail_label.width, None)))
+        detail_label.bind(texture_size=detail_label.setter('size'))
+
+        self.add_widget(detail_label)
+        # This makes the widget's height adjust to its content
+        self.bind(minimum_height=self.setter('height'))
+
+    def _update_rect(self, instance, value):
+        self.bg.pos = self.pos
+        self.bg.size = self.size
+
 class LoveLetterGame(BoxLayout):
     def __init__(self, **kwargs):
         self.game_log = ["Welcome to Love Letter Kivy!"]
@@ -176,6 +220,7 @@ class LoveLetterGame(BoxLayout):
         self.active_popup = None
         self.waiting_for_input = False
         self.opponent_widgets_map = {}
+        self.active_notification = None # Add this line
         self.animated_widget_details = {}
         super().__init__(**kwargs)
         self.orientation = 'vertical'
@@ -186,6 +231,51 @@ class LoveLetterGame(BoxLayout):
             self.bg = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._update_rect, size=self._update_rect)
         Clock.schedule_once(self._delayed_setup, 1)
+
+    # ADD THIS NEW METHOD to LoveLetterGame
+    def show_turn_notification(self, title, details, stay_duration=2.5):
+        """
+        Displays a non-blocking, animated notification on top of the game screen.
+        """
+        # The container is the parent widget (the Screen), which allows overlaying.
+        container = self.parent
+        if not container:
+            # This is a safeguard. If the method is called before the widget is
+            # added to the screen, we simply do nothing.
+            print("Warning: Cannot show notification, widget has no parent yet.")
+            return
+
+        # If a notification is already showing, remove it immediately from the container.
+        if self.active_notification and self.active_notification.parent:
+            Animation.cancel_all(self.active_notification)
+            container.remove_widget(self.active_notification)
+            self.active_notification = None
+
+        # Create the new notification widget
+        notification = TurnNotificationPopup(title_text=title, detail_text=details)
+        notification.pos_hint = {'center_x': 0.5, 'center_y': 0.65}
+
+        # *** KEY CHANGE: Add the widget to the parent, not self ***
+        container.add_widget(notification)
+        self.active_notification = notification
+
+        # The animation sequence remains the same: fade in, stay, fade out
+        anim = (
+                Animation(opacity=1, duration=0.4) +
+                Animation(duration=stay_duration) +
+                Animation(opacity=0, duration=0.5)
+        )
+
+        # When the animation is complete, remove the widget from its parent
+        def on_complete_animation(*args):
+            # Check if the notification still exists and has a parent before removing
+            if notification.parent:
+                notification.parent.remove_widget(notification)
+            if self.active_notification == notification:
+                self.active_notification = None
+
+        anim.bind(on_complete=on_complete_animation)
+        anim.start(notification)
 
     def show_victory_defeat_effect(self, is_victory=True):
         from kivy.uix.image import Image
@@ -795,7 +885,7 @@ class LoveLetterGame(BoxLayout):
         self.cleanup_leftover_rectangles()
         score_texts = []
         for p in self.players_session_list:
-            token_display = "★" * p.tokens + "☆" * (self.tokens_to_win_session - p.tokens)
+            token_display = "*" * p.tokens + "-" * (self.tokens_to_win_session - p.tokens)
             score_texts.append(f"{p.name}: {token_display}")
         self.score_label.text = " | ".join(score_texts)
         current_player_name_round = "N/A"
@@ -891,21 +981,21 @@ class LoveLetterGame(BoxLayout):
                 width=160,
                 padding=[8, 8, 8, 8]
             )
-            with opponent_container.canvas.before:
-                Color(0.3, 0.3, 0.4, 0.9)
-                RoundedRectangle(
-                    pos=(opponent_container.pos[0]-2, opponent_container.pos[1]-2),
-                    size=(opponent_container.size[0]+4, opponent_container.size[1]+4),
-                    radius=[15,]
-                )
-                if p_opponent.is_eliminated:
-                    Color(0.4, 0.08, 0.08, 0.85)
-                elif p_opponent.is_protected:
-                    Color(0.18, 0.13, 0.18, 0.85)
-                else:
-                    Color(0.18, 0.07, 0.07, 0.92)
-                RoundedRectangle(radius=[15,])
-            opponent_container.bind(pos=self._update_rect, size=self._update_rect)
+            # with opponent_container.canvas.before:
+            #     Color(0.3, 0.3, 0.4, 0.9)
+            #     RoundedRectangle(
+            #         pos=(opponent_container.pos[0]-2, opponent_container.pos[1]-2),
+            #         size=(opponent_container.size[0]+4, opponent_container.size[1]+4),
+            #         radius=[15,]
+            #     )
+            #     if p_opponent.is_eliminated:
+            #         Color(0.4, 0.08, 0.08, 0.85)
+            #     elif p_opponent.is_protected:
+            #         Color(0.18, 0.13, 0.18, 0.85)
+            #     else:
+            #         Color(0.18, 0.07, 0.07, 0.92)
+            #     RoundedRectangle(radius=[15,])
+            # opponent_container.bind(pos=self._update_rect, size=self._update_rect)
             name_box = BoxLayout(size_hint_y=0.15)
             with name_box.canvas.before:
                 if p_opponent.is_eliminated:
@@ -926,7 +1016,7 @@ class LoveLetterGame(BoxLayout):
             )
             name_box.add_widget(name_label)
             token_label = StyledLabel(
-                text="★" * p_opponent.tokens + "☆" * (self.tokens_to_win_session - p_opponent.tokens),
+                text="*" * p_opponent.tokens + "-" * (self.tokens_to_win_session - p_opponent.tokens),
                 font_size='12sp',
                 color=(1, 0.95, 0.5, 1),
                 bold=True
@@ -996,7 +1086,7 @@ class LoveLetterGame(BoxLayout):
             not self.waiting_for_input
         )
         token_label = StyledLabel(
-            text="Token: " + "★" * human_player.tokens + "☆" * (self.tokens_to_win_session - human_player.tokens),
+            text="Token: " + "*" * human_player.tokens + "-" * (self.tokens_to_win_session - human_player.tokens),
             font_size='15sp',
             color=(1, 0.95, 0.5, 1),
             bold=True
@@ -1008,14 +1098,14 @@ class LoveLetterGame(BoxLayout):
                 size_hint=(1 / len(human_player.hand) if len(human_player.hand) > 0 else 1, 1),
                 padding=[10, 10, 10, 5]
             )
-            if is_player_turn_active:
-                with card_container.canvas.before:
-                    Color(0.2, 0.4, 0.3, 0.4)
-                    RoundedRectangle(
-                        pos=(card_container.pos[0]+4, card_container.pos[1]-4),
-                        size=card_container.size,
-                        radius=[8,]
-                    )
+            # if is_player_turn_active:
+            #     with card_container.canvas.before:
+            #         Color(0.2, 0.4, 0.3, 0.4)
+            #         RoundedRectangle(
+            #             pos=(card_container.pos[0]+4, card_container.pos[1]-4),
+            #             size=card_container.size,
+            #             radius=[8,]
+            #         )
             card_frame = BoxLayout(padding=[2, 2, 2, 2])
             with card_frame.canvas.before:
                 if is_player_turn_active:
@@ -1180,6 +1270,7 @@ class LoveLetterGame(BoxLayout):
             'check_game_over_token_callback': self.check_game_over_on_token_gain,
             'game_over_callback': self.handle_game_over_from_round,
             'animate_effect_callback': self.ui_animate_effect,
+            'show_turn_notification_callback': self.show_turn_notification,  # ADD THIS LINE
         }
         self.current_round_manager = GameRound(
             self.players_session_list,
