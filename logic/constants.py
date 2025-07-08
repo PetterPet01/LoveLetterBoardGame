@@ -1,3 +1,4 @@
+# file: logic/constants.py
 CARD_FOLDER = "assets/cards"
 CARD_BACK_IMAGE = "assets/cards/back.png"
 ELIMINATED_IMAGE = "assets/cards/back.png"
@@ -57,3 +58,4 @@ CARDS_DATA_RAW = {
 }
 
 CARD_PROTOTYPES = {}  # Will be populated by Card objects from the UI side
+

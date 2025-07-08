@@ -1,3 +1,4 @@
+# file: logic/card.py
 class Card:
     def __init__(self, name, value, description, image_path, vietnamese_name, count_classic, count_large):
         self.name = name

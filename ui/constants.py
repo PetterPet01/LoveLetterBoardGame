@@ -1,4 +1,4 @@
-# file: constants.py
+# file: ui/constants.py
 
 import os
 from kivy.config import Config
@@ -20,7 +20,7 @@ DEFEAT_IMAGE = os.path.join(ASSETS_DIR, "defeat.webp")
 # Hình ảnh lá bài
 CARD_BACK_IMAGE = os.path.join(CARD_FOLDER, "back.png")
 EMPTY_CARD_IMAGE = os.path.join(CARD_FOLDER, "empty_card.png")
-ELIMINATED_IMAGE = os.path.join(CARD_FOLDER, "eliminated.png")
+ELIMINATED_IMAGE = os.path.join(CARD_FOLDER, "back.png")
 CARD_RULES_IMAGE = os.path.join(CARD_FOLDER, "card_list_2_4.png")
 
 # Cấu hình cửa sổ
@@ -38,3 +38,4 @@ CARD_VALUE_COLORS = {
 # Áp dụng cấu hình cửa sổ
 Window.size = WINDOW_SIZE
 Window.clearcolor = WINDOW_CLEAR_COLOR
+

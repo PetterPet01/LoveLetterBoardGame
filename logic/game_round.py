@@ -1,3 +1,4 @@
+# file: logic/game_round.py
 from .player import Player
 from .deck import Deck
 from .constants import CARD_PROTOTYPES
@@ -32,8 +33,10 @@ class GameRound:
         self.current_player_idx = random.randrange(len(self.players))
         self.round_active = True
         self.log_message(f"Vòng đấu bắt đầu. {self.players[self.current_player_idx].name} đi trước.")
-        self.ui['update_ui_full_callback']()
-        self._process_current_player_turn_start()
+        
+        # UI will animate dealing, then call the continuation.
+        self.ui['animate_deal_callback'](self._process_current_player_turn_start)
+
 
     def cancel_played_card_action(self, acting_player):
         self.log_message(f"{acting_player.name} quyết định lấy lại lá bài của mình.")
@@ -56,6 +59,7 @@ class GameRound:
         if not self.round_active:
             return
         if self.players[self.current_player_idx] != cpu_player:
+            self.log_message(f"DEBUG: Stale CPU turn for {cpu_player.name} detected and blocked. Current player is {self.players[self.current_player_idx].name}.")
             return
         self.log_message(f"Máy ({cpu_player.name}) quyết định chơi.")
         self._cpu_play_turn(cpu_player)
@@ -69,9 +73,16 @@ class GameRound:
             return
 
         current_player.is_protected = False
+        self.ui['update_ui_full_callback']()
 
-        if not self.deck.is_empty():
-            drawn_card = self.deck.draw()
+        if self.deck.is_empty():
+            self.log_message("Chồng bài đã hết. Vòng đấu kết thúc.")
+            self._end_round_deck_empty()
+            return
+
+        drawn_card = self.deck.draw()
+
+        def after_draw_animation():
             current_player.add_card_to_hand(drawn_card)
             if not current_player.is_cpu:
                 self.log_message(
@@ -80,23 +91,22 @@ class GameRound:
                 self.log_message(
                     f"{current_player.name} đã rút một lá bài. Số bài trên tay: {len(current_player.hand)}.")
             self.ui['update_ui_full_callback']()
-        else:
-            self.log_message("Chồng bài đã hết. Vòng đấu kết thúc.")
-            self._end_round_deck_empty()
-            return
 
-        if current_player.is_cpu:
-            self.log_message(f"Máy ({current_player.name}) đang suy nghĩ...")
-            delay_duration = 4
-            Clock.schedule_once(lambda dt: self._execute_cpu_turn_after_delay(current_player), delay_duration)
-        else:
-            self.log_message(f"Đến lượt bạn, {current_player.name}. Hãy chọn một lá bài để chơi.")
-            self.ui['set_waiting_flag_callback'](False)
-            hand_names = current_player.get_hand_card_names()
-            if self._is_card_in_current_deck('Countess') and 'Countess' in hand_names and \
-                    ((self._is_card_in_current_deck('King') and 'King' in hand_names) or \
-                     (self._is_card_in_current_deck('Prince') and 'Prince' in hand_names)):
-                self.log_message("LƯU Ý: Bạn có Nữ Bá tước và Vua/Hoàng tử. Bạn PHẢI chơi Nữ Bá tước.")
+            if current_player.is_cpu:
+                self.log_message(f"Máy ({current_player.name}) đang suy nghĩ...")
+                delay_duration = 2.5
+                Clock.schedule_once(lambda dt: self._execute_cpu_turn_after_delay(current_player), delay_duration)
+            else:
+                self.log_message(f"Đến lượt bạn, {current_player.name}. Hãy chọn một lá bài để chơi.")
+                self.ui['set_waiting_flag_callback'](False)
+                hand_names = current_player.get_hand_card_names()
+                if self._is_card_in_current_deck('Countess') and 'Countess' in hand_names and \
+                        ((self._is_card_in_current_deck('King') and 'King' in hand_names) or \
+                         (self._is_card_in_current_deck('Prince') and 'Prince' in hand_names)):
+                    self.log_message("LƯU Ý: Bạn có Nữ Bá tước và Vua/Hoàng tử. Bạn PHẢI chơi Nữ Bá tước.")
+
+        # Animate the draw, then run the logic above
+        self.ui['animate_draw_callback'](current_player, after_draw_animation)
 
     def human_plays_card(self, card_name_played):
         player = self.players[self.current_player_idx]
@@ -143,15 +153,19 @@ class GameRound:
 
     def _handle_card_played_logic(self, player, card_object_played):
         self.log_message(f"{player.name} chơi lá {card_object_played.name}.")
-        self.ui['update_ui_full_callback']()
-        if self._is_card_in_current_deck('Princess') and card_object_played.name == 'Princess':
-            self.log_message(f"{player.name} đã bỏ Công chúa và bị loại!")
-            self._eliminate_player(player)
-            self._finish_effect_and_proceed()
-            return
-        needs_input = self._execute_card_effect(player, card_object_played)
-        if not needs_input:
-            self._finish_effect_and_proceed()
+
+        def after_play_animation():
+            self.ui['update_ui_full_callback']()
+            if self._is_card_in_current_deck('Princess') and card_object_played.name == 'Princess':
+                self.log_message(f"{player.name} đã bỏ Công chúa và bị loại!")
+                self._eliminate_player(player, self._finish_effect_and_proceed)
+                return
+
+            needs_input = self._execute_card_effect(player, card_object_played)
+            if not needs_input:
+                self._finish_effect_and_proceed()
+
+        self.ui['animate_play_card_callback'](player, card_object_played, after_play_animation)
 
     def _is_card_in_current_deck(self, card_name):
         prototype = CARD_PROTOTYPES.get(card_name)
@@ -193,6 +207,7 @@ class GameRound:
             return False
 
     def _finish_effect_and_proceed(self):
+        self.log_message(f"DEBUG: _finish_effect_and_proceed called. Current player: {self.players[self.current_player_idx].name}")
         self.ui['set_waiting_flag_callback'](False)
         if self.ui['get_active_popup_callback']():
             self.ui['dismiss_active_popup_callback']()
@@ -205,19 +220,29 @@ class GameRound:
             self._advance_to_next_turn()
         self.ui['update_ui_full_callback']()
 
-    def _eliminate_player(self, player_to_eliminate):
-        if player_to_eliminate.is_eliminated: return
+    def _eliminate_player(self, player_to_eliminate, continuation=None):
+        if player_to_eliminate.is_eliminated:
+            if continuation: continuation()
+            return
+
         player_to_eliminate.is_eliminated = True
         self.log_message(f"{player_to_eliminate.name} đã bị loại!")
-        if self._is_card_in_current_deck('Sheriff') and player_to_eliminate.has_discarded('Sheriff'):
-            self.log_message(f"{player_to_eliminate.name} có Nguyên soái trong bài bỏ và nhận được một tín vật!")
-            player_to_eliminate.tokens += 1
-            if self.ui['check_game_over_token_callback'](player_to_eliminate):
-                self.game_over_pending_from_round = True
-                self.game_over_winner = player_to_eliminate
+
+        def after_elimination_animation():
+            if self._is_card_in_current_deck('Sheriff') and player_to_eliminate.has_discarded('Sheriff'):
+                self.log_message(f"{player_to_eliminate.name} có Nguyên soái trong bài bỏ và nhận được một tín vật!")
+                player_to_eliminate.tokens += 1
+                if self.ui['check_game_over_token_callback'](player_to_eliminate):
+                    self.game_over_pending_from_round = True
+                    self.game_over_winner = player_to_eliminate
+            if continuation:
+                continuation()
+
+        self.ui['animate_elimination_callback'](player_to_eliminate, after_elimination_animation)
 
     def _advance_to_next_turn(self):
         if not self.round_active: return
+        self.log_message(f"DEBUG: _advance_to_next_turn called. About to advance from player: {self.players[self.current_player_idx].name}")
         attempts = 0
         while attempts < len(self.players) * 2:
             self.current_player_idx = (self.current_player_idx + 1) % len(self.players)
@@ -229,6 +254,7 @@ class GameRound:
             self._end_round_by_elimination()
             return
         next_player = self.players[self.current_player_idx]
+        self.log_message(f"DEBUG: Next player is {next_player.name}")
         if not next_player.is_cpu:
             self.log_message(f"--- Đến lượt bạn ({next_player.name}) ---")
         else:
@@ -311,8 +337,8 @@ class GameRound:
             if not possible_values: self.log_message("Cận vệ (Máy): Không có giá trị hợp lệ để đoán!"); return False
             guess_val = random.choice(possible_values)
             self.log_message(f"Máy ({player.name}) chơi Cận vệ lên {target_player.name}, đoán giá trị {guess_val}.")
-            self._resolve_guard_guess(player, target_player, guess_val)
-            return False
+            self._resolve_guard_guess(player, target_player, guess_val, self._finish_effect_and_proceed)
+            return True
         else:
             self.ui['request_target_selection_callback'](
                 player, card_played, valid_targets,
@@ -338,28 +364,31 @@ class GameRound:
 
     def _resolve_guard_value_guessed(self, acting_player, target_player, guessed_value):
         self.log_message(f"{acting_player.name} (Cận vệ) đoán giá trị {guessed_value} cho {target_player.name}.")
-        self._resolve_guard_guess(acting_player, target_player, guessed_value)
-        self._finish_effect_and_proceed()
+        self._resolve_guard_guess(acting_player, target_player, guessed_value, self._finish_effect_and_proceed)
 
-    def _resolve_guard_guess(self, acting_player, target_player, guessed_value):
-        if not target_player.hand: return
+    def _resolve_guard_guess(self, acting_player, target_player, guessed_value, continuation):
+        if not target_player.hand:
+            if continuation: continuation()
+            return
 
         target_card = target_player.hand[0]
         title = f"{acting_player.name} chơi Cận vệ lên {target_player.name}"
 
         if self._is_card_in_current_deck('Assassin') and target_card.name == 'Assassin':
             self.log_message(f"{target_player.name} lộ ra Sát thủ! {acting_player.name} bị loại!")
-            self._eliminate_player(acting_player)
-
-            target_player.play_card('Assassin')
-            if not self.deck.is_empty():
-                new_card = self.deck.draw()
-                if new_card: target_player.add_card_to_hand(new_card)
-            elif self.shared_burned_card_ref['card']:
-                new_card = self.shared_burned_card_ref['card']
-                target_player.add_card_to_hand(new_card)
-                self.shared_burned_card_ref['card'] = None
-            self.log_message(f"{target_player.name} bỏ Sát thủ và rút một lá bài mới.")
+            def assassin_continuation():
+                target_player.play_card('Assassin')
+                if not self.deck.is_empty():
+                    new_card = self.deck.draw()
+                    if new_card: target_player.add_card_to_hand(new_card)
+                elif self.shared_burned_card_ref['card']:
+                    new_card = self.shared_burned_card_ref['card']
+                    target_player.add_card_to_hand(new_card)
+                    self.shared_burned_card_ref['card'] = None
+                self.log_message(f"{target_player.name} bỏ Sát thủ và rút một lá bài mới.")
+                if continuation: continuation()
+            
+            self._eliminate_player(acting_player, assassin_continuation)
             return
 
         if target_card.value == guessed_value:
@@ -367,12 +396,13 @@ class GameRound:
             self.log_message(details)
             if 'show_turn_notification_callback' in self.ui:
                 self.ui['show_turn_notification_callback'](title, details)
-            self._eliminate_player(target_player)
+            self._eliminate_player(target_player, continuation)
         else:
             details = f"Đoán sai. {target_player.name} không có lá bài giá trị {guessed_value}."
             self.log_message(details)
             if 'show_turn_notification_callback' in self.ui:
                 self.ui['show_turn_notification_callback'](title, details)
+            if continuation: continuation()
 
     def _effect_priest(self, player, card_played, must_target_self):
         valid_targets = self._get_valid_targets(player, include_self=False, targeted_effect_requires_unprotected=True)
@@ -424,7 +454,7 @@ class GameRound:
         if player.is_cpu:
             target_player = random.choice(valid_targets)
             self._resolve_baron_effect(player, target_player)
-            return False
+            return True
         else:
             self.ui['request_target_selection_callback'](
                 player, card_played, valid_targets,
@@ -436,65 +466,63 @@ class GameRound:
     def _resolve_baron_target_selected(self, acting_player, target_player_id):
         target_player = next(p for p in self.players if p.id == target_player_id)
         self._resolve_baron_effect(acting_player, target_player)
-        self._finish_effect_and_proceed()
 
     def _resolve_baron_effect(self, player, target_player):
         if not player.hand or not target_player.hand:
             self.log_message("So bài Nam tước cần cả hai người chơi đều có bài. Hiệu ứng mất.")
+            self._finish_effect_and_proceed()
             return
 
         player_card = player.hand[0]
         opponent_card = target_player.hand[0]
         title = f"{player.name} chơi Nam tước với {target_player.name}"
-        details = f"Họ so bài: {player.name} có {player_card.name} ({player_card.value}) vs {target_player.name} có {opponent_card.name} ({opponent_card.value}). "
+        details = f"So bài: {player.name} ({player_card.value}) vs {target_player.name} ({opponent_card.value}). "
 
         if player_card.value > opponent_card.value:
             details += f"{target_player.name} bị loại."
-            self._eliminate_player(target_player)
+            self.log_message(details)
+            if 'show_turn_notification_callback' in self.ui: self.ui['show_turn_notification_callback'](title, details)
+            self._eliminate_player(target_player, self._finish_effect_and_proceed)
         elif opponent_card.value > player_card.value:
             details += f"{player.name} bị loại."
-            self._eliminate_player(player)
+            self.log_message(details)
+            if 'show_turn_notification_callback' in self.ui: self.ui['show_turn_notification_callback'](title, details)
+            self._eliminate_player(player, self._finish_effect_and_proceed)
         else:
             details += "Hòa! Không ai bị loại."
+            self.log_message(details)
+            if 'show_turn_notification_callback' in self.ui: self.ui['show_turn_notification_callback'](title, details)
+            self._finish_effect_and_proceed()
 
-        self.log_message(details)
-        if 'show_turn_notification_callback' in self.ui:
-            self.ui['show_turn_notification_callback'](title, details)
-
-    # Add these two new methods to your GameRound class
 
     def _resolve_handmaid_and_proceed(self, player):
-        """Helper to resolve the effect AND then proceed for a human player."""
         self._resolve_handmaid_effect(player)
         self._finish_effect_and_proceed()
 
     def _resolve_countess_and_proceed(self, player):
-        """Helper to resolve the effect AND then proceed for a human player."""
         self._resolve_countess_effect(player)
         self._finish_effect_and_proceed()
 
     def _effect_handmaid(self, player, card_played):
-        # For a human, we need input. For a CPU, we don't.
         if player.is_cpu:
             self._resolve_handmaid_effect(player)
-            return False  # Correctly signals to the main loop that no more input is needed.
+            return False
         else:
-            # For a human, we need to wait for a popup confirmation.
             self.ui['request_confirmation_popup_callback'](player,
                                                            card_played,
                                                            self._resolve_handmaid_and_proceed,
                                                            self.cancel_played_card_action
             )
-            return True  # Correctly signals to the main loop to WAIT.
+            return True
 
     def _resolve_handmaid_effect(self, player):
         player.is_protected = True
         title = f"{player.name} chơi Cô hầu"
         details = "Họ được an toàn khỏi các hiệu ứng cho đến lượt tiếp theo."
         self.log_message(f"{player.name} chơi Cô hầu và được bảo vệ.")
+        self.ui.get('animate_effect_callback', lambda *a: None)({'type':'highlight_player', 'player_ids':[player.id], 'color_type': 'protection'})
         if 'show_turn_notification_callback' in self.ui:
             self.ui['show_turn_notification_callback'](title, details)
-        # self._finish_effect_and_proceed()
 
     def _effect_prince(self, player, card_played, must_target_self):
         valid_targets = []
@@ -511,7 +539,7 @@ class GameRound:
             target_player = random.choice(valid_targets)
             self.log_message(f"Máy ({player.name}) chơi Hoàng tử, chọn {target_player.name}.")
             self._resolve_prince_effect(target_player)
-            return False
+            return True
         else:
             self.ui['request_target_selection_callback'](
                 player, card_played, valid_targets,
@@ -524,18 +552,16 @@ class GameRound:
         target_player = next(p for p in self.players if p.id == target_player_id)
         self.log_message(f"{acting_player.name} (Hoàng tử) chọn {target_player.name} để bỏ bài và rút.")
         self._resolve_prince_effect(target_player)
-        self._finish_effect_and_proceed()
 
     def _resolve_prince_effect(self, target_player):
-        if not target_player.hand and not self.shared_burned_card_ref[
-            'card'] and self.deck.is_empty():
+        if not target_player.hand and not self.shared_burned_card_ref['card'] and self.deck.is_empty():
             self.log_message(f"{target_player.name} không có bài và không có lá nào để rút (Hoàng tử).")
+            self._finish_effect_and_proceed()
             return
 
         discarded_card = None
         if target_player.hand:
-            original_hand_card = target_player.hand[0]
-            discarded_card = target_player.force_discard(self.deck, self.shared_burned_card_ref)
+            discarded_card = target_player.hand[0]
             details = f"{target_player.name} bị buộc phải bỏ lá {discarded_card.name} và rút một lá mới."
             self.log_message(details)
             if 'show_turn_notification_callback' in self.ui:
@@ -543,26 +569,37 @@ class GameRound:
 
             if self._is_card_in_current_deck('Princess') and discarded_card.name == 'Princess':
                 self.log_message(f"{target_player.name} đã bỏ Công chúa (bị ép bởi Hoàng tử) và bị loại!")
-                self._eliminate_player(target_player)
+                def on_discard_anim_done():
+                    target_player.force_discard(self.deck, self.shared_burned_card_ref, draw_new=False)
+                    self._eliminate_player(target_player, self._finish_effect_and_proceed)
+                self.ui['animate_prince_discard_callback'](target_player, discarded_card, on_discard_anim_done)
                 return
-        else:
-            if not self.deck.is_empty():
-                new_card = self.deck.draw()
-                target_player.add_card_to_hand(new_card)
-            elif self.shared_burned_card_ref['card']:
-                new_card = self.shared_burned_card_ref['card']
-                target_player.add_card_to_hand(new_card)
-                self.shared_burned_card_ref['card'] = None
-            else:
-                self.log_message(f"{target_player.name} không có bài để rút (chồng bài và bài đốt đã hết).")
 
-        if target_player.hand:
-            if not target_player.is_cpu:
-                self.log_message(f"Bạn ({target_player.name}) rút được {target_player.hand[0].name}.")
-            else:
-                self.log_message(f"{target_player.name} rút một lá mới.")
-        elif not target_player.is_eliminated:
-            self.log_message(f"{target_player.name} không có bài sau hiệu ứng Hoàng tử (chồng bài và bài đốt đã hết).")
+            def on_discard_and_draw_anim_done():
+                target_player.force_discard(self.deck, self.shared_burned_card_ref, draw_new=True)
+                if target_player.hand:
+                    if not target_player.is_cpu: self.log_message(f"Bạn ({target_player.name}) rút được {target_player.hand[0].name}.")
+                    else: self.log_message(f"{target_player.name} rút một lá mới.")
+                elif not target_player.is_eliminated:
+                    self.log_message(f"{target_player.name} không có bài sau hiệu ứng Hoàng tử (chồng bài và bài đốt đã hết).")
+                self._finish_effect_and_proceed()
+
+            self.ui['animate_prince_discard_callback'](target_player, discarded_card, on_discard_and_draw_anim_done, draw_new=True)
+
+        else: # Player has no hand, just draws
+            def on_draw_anim_done():
+                if not self.deck.is_empty():
+                    new_card = self.deck.draw()
+                    target_player.add_card_to_hand(new_card)
+                elif self.shared_burned_card_ref['card']:
+                    new_card = self.shared_burned_card_ref['card']
+                    target_player.add_card_to_hand(new_card)
+                    self.shared_burned_card_ref['card'] = None
+                else:
+                    self.log_message(f"{target_player.name} không có bài để rút (chồng bài và bài đốt đã hết).")
+                self._finish_effect_and_proceed()
+            self.ui['animate_draw_callback'](target_player, on_draw_anim_done)
+
 
     def _effect_king(self, player, card_played, must_target_self):
         valid_targets = self._get_valid_targets(player, include_self=False, targeted_effect_requires_unprotected=True)
@@ -574,7 +611,7 @@ class GameRound:
         if player.is_cpu:
             target_player = random.choice(valid_targets)
             self._resolve_king_effect(player, target_player)
-            return False
+            return True
         else:
             self.ui['request_target_selection_callback'](
                 player, card_played, valid_targets,
@@ -586,25 +623,31 @@ class GameRound:
     def _resolve_king_target_selected(self, acting_player, target_player_id):
         target_player = next(p for p in self.players if p.id == target_player_id)
         self._resolve_king_effect(acting_player, target_player)
-        self._finish_effect_and_proceed()
 
     def _resolve_king_effect(self, player, target_player):
         if not player.hand or not target_player.hand:
             self.log_message("Tráo bài Vua cần cả hai người chơi đều có bài. Hiệu ứng mất.");
+            self._finish_effect_and_proceed()
             return
 
-        player_card_obj = player.hand.pop(0)
-        opponent_card_obj = target_player.hand.pop(0)
-
-        player.add_card_to_hand(opponent_card_obj)
-        target_player.add_card_to_hand(player_card_obj)
-
+        player_card_obj_pre_swap = player.hand[0]
+        opponent_card_obj_pre_swap = target_player.hand[0]
+        
+        player.hand[0], target_player.hand[0] = target_player.hand[0], player.hand[0]
+        
         title = f"{player.name} chơi Vua"
-        details = f"Họ tráo đổi bài với {target_player.name}. \n{player.name} nhận được lá {opponent_card_obj.name}."
-        self.log_message(f"{player.name} (Vua) tráo bài với {target_player.name}. "
-                         f"{player.name} nhận {opponent_card_obj.name}, {target_player.name} nhận {player_card_obj.name}.")
+        details = f"Họ tráo đổi bài với {target_player.name}."
+        log_details = (f"{player.name} (Vua) tráo bài với {target_player.name}. "
+                       f"{player.name} nhận {opponent_card_obj_pre_swap.name}, {target_player.name} nhận {player_card_obj_pre_swap.name}.")
+        self.log_message(log_details)
+
+        if not player.is_cpu:
+            details += f"\nBây giờ bạn có lá {opponent_card_obj_pre_swap.name}."
+        
         if 'show_turn_notification_callback' in self.ui:
             self.ui['show_turn_notification_callback'](title, details)
+        
+        self.ui['animate_king_swap_callback'](player, target_player, self._finish_effect_and_proceed)
 
     def _effect_countess(self, player, card_played):
         if player.is_cpu:
@@ -622,8 +665,8 @@ class GameRound:
         self.log_message("Nữ Bá tước được chơi. Không có hiệu ứng đặc biệt.")
         if 'show_turn_notification_callback' in self.ui:
             self.ui['show_turn_notification_callback'](title, details)
-        # self._finish_effect_and_proceed()
 
     def _effect_princess(self, player, card_played):
         self.log_message(f"LỖI: Hiệu ứng Công chúa đã được thực thi, đáng lẽ phải bị chặn sớm hơn.");
         return False
+

@@ -1,3 +1,4 @@
+# file: logic/player.py
 class Player:
     def __init__(self, id_num, name, is_cpu=False):
         self.id = id_num
@@ -35,10 +36,13 @@ class Player:
             return card_to_play
         return None
 
-    def force_discard(self, game_deck, burned_card_ref):
+    def force_discard(self, game_deck, burned_card_ref, draw_new=True):
         if not self.hand: return None
         discarded_card = self.hand.pop(0)
         self.discard_pile.append(discarded_card)
+        if not draw_new:
+            return discarded_card
+
         new_card = None
         if not game_deck.is_empty():
             new_card = game_deck.draw()
@@ -63,3 +67,4 @@ class Player:
 
     def __repr__(self):
         return f"Player({self.name}, Tokens:{self.tokens}, Hand:{[c.name for c in self.hand]})"
+

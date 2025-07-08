@@ -1,3 +1,4 @@
+# file: logic/deck.py
 import random
 from .constants import CARD_PROTOTYPES
 
@@ -44,19 +45,16 @@ class Deck:
         if num_players > 1 and self.cards:
             self.burned_card = self.draw()
             if self.burned_card:
+                log_prefix = "Chồng bài (2P):" if num_players == 2 else "Chồng bài:"
                 self.log_callback(
-                    f"Chồng bài: Đã đốt một lá ({self.burned_card.name}). Còn lại {len(self.cards)} lá.")
+                    f"{log_prefix} Đã đốt một lá ({self.burned_card.name}). Còn lại {len(self.cards)} lá.")
             else:
                 self.log_callback("Chồng bài: Thử đốt bài nhưng chồng bài đã hết.")
-        elif num_players == 2:
-            if self.cards:
-                self.burned_card = self.draw()
-                if self.burned_card:
-                    self.log_callback(
-                        f"Chồng bài (2P): Đã đốt một lá ({self.burned_card.name}). Còn lại {len(self.cards)} lá.")
+
 
     def is_empty(self):
         return not self.cards
 
     def count(self):
         return len(self.cards)
+
