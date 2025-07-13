@@ -233,7 +233,7 @@ def effect_handmaid(game_round, acting_player, card_played, **kwargs):
 
     if acting_player.is_cpu:
         _resolve_handmaid_effect(game_round, acting_player, game_round.finish_effect_and_proceed)
-        return False
+        return True
     else:
         game_round.ui['request_confirmation_popup_callback'](
             acting_player, card_played,
