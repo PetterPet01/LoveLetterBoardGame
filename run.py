@@ -2,6 +2,7 @@
 
 import os
 import random
+import sys
 from kivy.app import App
 from kivy.uix.screenmanager import ScreenManager, Screen, FadeTransition
 
@@ -16,39 +17,43 @@ from ui.screens import IntroScreen, RulesScreen
 
 class LoveLetterApp(App):
     def build(self):
-        # Tạo thư mục assets nếu chưa tồn tại
-        os.makedirs(CARD_FOLDER, exist_ok=True)
-        
+        # Tạo thư mục assets nếu chưa tồn tại.
+        # Điều này được xử lý trong khối __main__ cho môi trường phát triển.
+
         self.title = 'Thư Tình Board Game'
-        
+
         # Thiết lập ScreenManager
         sm = ScreenManager(transition=FadeTransition(duration=0.5))
-        
+
         # Tạo instance của màn hình game chính
         game_widget = LoveLetterGame()
-        
+
         # Tạo các màn hình
         intro_screen = IntroScreen(name='intro')
         rules_screen = RulesScreen(name='rules')
         game_screen = Screen(name='game')
-        
+
         # Liên kết màn hình luật chơi với instance của game
         # để nó có thể gọi hàm bắt đầu game
         rules_screen.game_instance = game_widget
-        
+
         # Thêm widget game vào màn hình game
         game_screen.add_widget(game_widget)
-        
+
         # Thêm các màn hình vào ScreenManager
         sm.add_widget(intro_screen)
         sm.add_widget(rules_screen)
         sm.add_widget(game_screen)
-        
+
         return sm
 
 # ---- Hàm tạo ảnh giả để chạy thử nghiệm ----
 def create_dummy_images():
     """Tạo các ảnh placeholder nếu chúng không tồn tại."""
+    if hasattr(sys, '_MEIPASS'):
+        # Trong ứng dụng đã đóng gói, tài sản là chỉ đọc. Không cố gắng tạo chúng.
+        return
+
     try:
         from PIL import Image as PILImage, ImageDraw
     except ImportError:
@@ -83,12 +88,14 @@ def create_dummy_images():
         v_name = card_data['vietnamese_name']
         path_png = os.path.join(CARD_FOLDER, f"{v_name}.png")
         if not os.path.exists(path_png):
-            create_image(path_png, (200, 300), 
+            create_image(path_png, (200, 300),
                          (random.randint(50, 200), random.randint(50, 200), random.randint(50, 200)),
                          f"{card_key}\n(V:{card_data['value']})\n{v_name}")
 
 if __name__ == '__main__':
-    os.makedirs(ASSETS_DIR, exist_ok=True)
-    os.makedirs(CARD_FOLDER, exist_ok=True)
-    create_dummy_images()
+    # Phần sau đây dành cho thiết lập môi trường phát triển và sẽ không chạy trong ứng dụng đã đóng gói.
+    if not hasattr(sys, '_MEIPASS'):
+        os.makedirs(ASSETS_DIR, exist_ok=True)
+        os.makedirs(CARD_FOLDER, exist_ok=True)
+        create_dummy_images()
     LoveLetterApp().run()

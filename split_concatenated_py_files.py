@@ -15,9 +15,9 @@ def split_concatenated_file(input_path, output_base="."):
             relative_path = header.strip().rstrip("/\\")  # Remove trailing slash/backslash
 
             # Skip directories or junk names
-            if not relative_path.endswith(".py"):
-                print(f"⚠️ Skipping non-.py entry: {relative_path}")
-                continue
+            # if not relative_path.endswith(".py"):
+            #     print(f"⚠️ Skipping non-.py entry: {relative_path}")
+            #     continue
 
             code = "\n".join(code_lines)
             output_path = os.path.join(output_base, relative_path)
