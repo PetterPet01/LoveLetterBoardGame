@@ -18,6 +18,7 @@ or False if the effect is resolved and the game can proceed to the next turn.
 import random
 from .constants import CARD_PROTOTYPES
 
+
 # --- Helper Functions ---
 
 def _prepare_animation_data(acting_player, target_player, card, outcome, details):
@@ -40,12 +41,14 @@ def _get_generic_targets(game_round, acting_player, include_self=False, unprotec
         allow_no_hand=allow_no_hand
     )
 
+
 # --- Guard Effect ---
 
 def effect_guard(game_round, acting_player, card_played, **kwargs):
     valid_targets = _get_generic_targets(game_round, acting_player)
     if acting_player.sycophant_target_self:
-        game_round.log_message(f"Kẻ nịnh bợ: {acting_player.name} phải tự chọn mình, nhưng Cận vệ không thể. Hiệu ứng mất.")
+        game_round.log_message(
+            f"Kẻ nịnh bợ: {acting_player.name} phải tự chọn mình, nhưng Cận vệ không thể. Hiệu ứng mất.")
         return False
     if not valid_targets:
         game_round.log_message("Cận vệ: Không có mục tiêu hợp lệ.")
@@ -62,7 +65,8 @@ def effect_guard(game_round, acting_player, card_played, **kwargs):
             game_round.log_message("Cận vệ (Máy): Không có giá trị hợp lệ để đoán!")
             return False
         guess_val = random.choice(possible_values)
-        game_round.log_message(f"Máy ({acting_player.name}) chơi Cận vệ lên {target_player.name}, đoán giá trị {guess_val}.")
+        game_round.log_message(
+            f"Máy ({acting_player.name}) chơi Cận vệ lên {target_player.name}, đoán giá trị {guess_val}.")
         _resolve_guard_guess(game_round, acting_player, target_player, guess_val, game_round.finish_effect_and_proceed)
         return True
     else:
@@ -73,27 +77,36 @@ def effect_guard(game_round, acting_player, card_played, **kwargs):
         )
         return True
 
+
 def _resolve_guard_target_selected(game_round, acting_player, card_played, target_player_id):
     target_player = next(p for p in game_round.players if p.id == target_player_id)
     possible_values = sorted(list(set(proto.value for name, proto in CARD_PROTOTYPES.items()
-                                       if proto.value != 1 and game_round.is_card_in_current_deck(name))))
+                                      if proto.value != 1 and game_round.is_card_in_current_deck(name))))
     if not possible_values:
         game_round.log_message(f"Cận vệ: Không có giá trị hợp lệ để đoán {target_player.name}! Hiệu ứng mất.")
         game_round.finish_effect_and_proceed()
-        return True # Handled
+        return True  # Handled
 
     game_round.ui['request_guard_value_popup_callback'](
         acting_player, target_player, possible_values,
         lambda ap, tp, gv: _resolve_guard_guess(game_round, ap, tp, gv, game_round.finish_effect_and_proceed),
         game_round.cancel_played_card_action
     )
-    return True # Handled
+    return True  # Handled
+
 
 def _resolve_guard_guess(game_round, acting_player, target_player, guessed_value, continuation):
     game_round.log_message(f"{acting_player.name} (Cận vệ) đoán giá trị {guessed_value} cho {target_player.name}.")
+
+    # --- FIX APPLIED ---
+    # Handle the case where the target has no hand by routing it through the animation panel.
     if not target_player.hand:
         game_round.log_message(f"Đoán vào {target_player.name}, nhưng họ không có bài.")
-        if continuation: continuation()
+        outcome = 'fail'
+        details = {'guessed_value': guessed_value, 'target_card': None, 'reason': f"{target_player.name} không có bài."}
+        animation_data = _prepare_animation_data(acting_player, target_player, CARD_PROTOTYPES['Guard'], outcome,
+                                                 details)
+        game_round.ui['animate_card_effect_callback'](animation_data, continuation)
         return
 
     target_card = target_player.hand[0]
@@ -105,6 +118,7 @@ def _resolve_guard_guess(game_round, acting_player, target_player, guessed_value
     def final_logic():
         if outcome == 'reversed':
             game_round.log_message(f"{target_player.name} lộ ra Sát thủ! {acting_player.name} bị loại!")
+
             def assassin_continuation():
                 if game_round.ui.get('add_to_global_discard_callback'):
                     game_round.ui['add_to_global_discard_callback'](target_player, target_card)
@@ -113,11 +127,12 @@ def _resolve_guard_guess(game_round, acting_player, target_player, guessed_value
                 if new_card: target_player.add_card_to_hand(new_card)
                 game_round.log_message(f"{target_player.name} bỏ Sát thủ và rút một lá bài mới.")
                 if continuation: continuation()
+
             game_round.eliminate_player(acting_player, assassin_continuation)
         elif outcome == 'success':
             game_round.log_message(f"Đoán đúng! {target_player.name} có {target_card.name}. Đã bị loại.")
             game_round.eliminate_player(target_player, continuation)
-        else: # Fail
+        else:  # Fail
             game_round.log_message(f"Đoán sai. {target_player.name} không có lá bài giá trị {guessed_value}.")
             if continuation: continuation()
 
@@ -130,7 +145,8 @@ def _resolve_guard_guess(game_round, acting_player, target_player, guessed_value
 def effect_priest(game_round, acting_player, card_played, **kwargs):
     valid_targets = _get_generic_targets(game_round, acting_player)
     if acting_player.sycophant_target_self:
-        game_round.log_message(f"Kẻ nịnh bợ: {acting_player.name} phải tự chọn mình, nhưng Mục sư không thể. Hiệu ứng mất.")
+        game_round.log_message(
+            f"Kẻ nịnh bợ: {acting_player.name} phải tự chọn mình, nhưng Mục sư không thể. Hiệu ứng mất.")
         return False
     if not valid_targets:
         game_round.log_message("Mục sư: Không có mục tiêu hợp lệ.")
@@ -153,14 +169,21 @@ def effect_priest(game_round, acting_player, card_played, **kwargs):
         )
         return True
 
+
 def _resolve_priest_effect(game_round, acting_player, target_player, continuation):
+    # --- FIX APPLIED ---
     if not target_player.hand:
         game_round.log_message(f"{target_player.name} không có bài để xem (Mục sư).")
-        if continuation: continuation()
+        outcome = 'fail'
+        details = {'reason': f"{target_player.name} không có bài."}
+        animation_data = _prepare_animation_data(acting_player, target_player, CARD_PROTOTYPES['Priest'], outcome,
+                                                 details)
+        game_round.ui['animate_card_effect_callback'](animation_data, continuation)
         return
 
     target_card = target_player.hand[0]
     details = {'target_card': target_card}
+
     def final_logic():
         log_msg = f"{acting_player.name} nhìn vào tay của {target_player.name}."
         if not acting_player.is_cpu:
@@ -168,7 +191,8 @@ def _resolve_priest_effect(game_round, acting_player, target_player, continuatio
         game_round.log_message(log_msg)
         if continuation: continuation()
 
-    animation_data = _prepare_animation_data(acting_player, target_player, card=CARD_PROTOTYPES['Priest'], outcome='neutral', details=details)
+    animation_data = _prepare_animation_data(acting_player, target_player, card=CARD_PROTOTYPES['Priest'],
+                                             outcome='neutral', details=details)
     game_round.ui['animate_card_effect_callback'](animation_data, final_logic)
 
 
@@ -177,7 +201,8 @@ def _resolve_priest_effect(game_round, acting_player, target_player, continuatio
 def effect_baron(game_round, acting_player, card_played, **kwargs):
     valid_targets = _get_generic_targets(game_round, acting_player)
     if acting_player.sycophant_target_self:
-        game_round.log_message(f"Kẻ nịnh bợ: {acting_player.name} phải tự chọn mình, nhưng Nam tước không thể. Hiệu ứng mất.")
+        game_round.log_message(
+            f"Kẻ nịnh bợ: {acting_player.name} phải tự chọn mình, nhưng Nam tước không thể. Hiệu ứng mất.")
         return False
     if not valid_targets:
         game_round.log_message("Nam tước: Không có mục tiêu hợp lệ.")
@@ -200,24 +225,33 @@ def effect_baron(game_round, acting_player, card_played, **kwargs):
         )
         return True
 
+
 def _resolve_baron_effect(game_round, player, target_player, continuation):
+    # --- FIX APPLIED ---
     if not player.hand or not target_player.hand:
         game_round.log_message("So bài Nam tước cần cả hai người chơi đều có bài. Hiệu ứng mất.")
-        if continuation: continuation()
+        outcome = 'fail'
+        details = {'reason': "Một trong hai người chơi không có bài."}
+        animation_data = _prepare_animation_data(player, target_player, CARD_PROTOTYPES['Baron'], outcome, details)
+        game_round.ui['animate_card_effect_callback'](animation_data, continuation)
         return
 
-    player_card = player.hand[0]; opponent_card = target_player.hand[0]
+    player_card = player.hand[0];
+    opponent_card = target_player.hand[0]
     winner, loser = (player, target_player) if player_card.value > opponent_card.value else \
-                    (target_player, player) if opponent_card.value > player_card.value else (None, None)
+        (target_player, player) if opponent_card.value > player_card.value else (None, None)
 
     outcome = 'win' if winner == player else 'loss' if loser == player else 'tie'
     details = {'player_card': player_card, 'opponent_card': opponent_card}
+
     def final_logic():
         if loser:
-            game_round.log_message(f"So bài Nam tước: {player.name}({player_card.value}) vs {target_player.name}({opponent_card.value}). {loser.name} bị loại.")
+            game_round.log_message(
+                f"So bài Nam tước: {player.name}({player_card.value}) vs {target_player.name}({opponent_card.value}). {loser.name} bị loại.")
             game_round.eliminate_player(loser, continuation)
         else:
-            game_round.log_message(f"So bài Nam tước: {player.name}({player_card.value}) vs {target_player.name}({opponent_card.value}). Hòa!")
+            game_round.log_message(
+                f"So bài Nam tước: {player.name}({player_card.value}) vs {target_player.name}({opponent_card.value}). Hòa!")
             if continuation: continuation()
 
     animation_data = _prepare_animation_data(player, target_player, CARD_PROTOTYPES['Baron'], outcome, details)
@@ -233,6 +267,8 @@ def effect_handmaid(game_round, acting_player, card_played, **kwargs):
 
     if acting_player.is_cpu:
         _resolve_handmaid_effect(game_round, acting_player, game_round.finish_effect_and_proceed)
+        # --- FIX APPLIED ---
+        # Changed from False to True to wait for the animation.
         return True
     else:
         game_round.ui['request_confirmation_popup_callback'](
@@ -241,6 +277,7 @@ def effect_handmaid(game_round, acting_player, card_played, **kwargs):
             game_round.cancel_played_card_action
         )
         return True
+
 
 def _resolve_handmaid_effect(game_round, player, continuation):
     def final_logic():
@@ -260,10 +297,12 @@ def effect_prince(game_round, acting_player, card_played, **kwargs):
     if acting_player.sycophant_target_self:
         if not acting_player.is_eliminated: valid_targets = [acting_player]
         if not valid_targets:
-            game_round.log_message(f"Hoàng tử (Kẻ nịnh bợ): {acting_player.name} phải tự chọn mình nhưng không hợp lệ. Hiệu ứng mất.")
+            game_round.log_message(
+                f"Hoàng tử (Kẻ nịnh bợ): {acting_player.name} phải tự chọn mình nhưng không hợp lệ. Hiệu ứng mất.")
             return False
     else:
-        valid_targets = _get_generic_targets(game_round, acting_player, include_self=True, unprotected_only=True, allow_no_hand=True)
+        valid_targets = _get_generic_targets(game_round, acting_player, include_self=True, unprotected_only=True,
+                                             allow_no_hand=True)
     if not valid_targets:
         game_round.log_message("Hoàng tử: Không có mục tiêu hợp lệ.")
         return False
@@ -287,29 +326,39 @@ def effect_prince(game_round, acting_player, card_played, **kwargs):
         )
         return True
 
+
 def _resolve_prince_effect(game_round, target_player, continuation):
+    # --- FIX APPLIED ---
     if not target_player.hand and not game_round.shared_burned_card_ref['card'] and game_round.deck.is_empty():
         game_round.log_message(f"{target_player.name} không có bài và không có lá nào để rút (Hoàng tử).")
-        if continuation: continuation()
+        outcome = 'fail'
+        details = {'reason': f"{target_player.name} không có bài và không có lá nào để rút."}
+        animation_data = _prepare_animation_data(game_round.players[game_round.current_player_idx], target_player,
+                                                 CARD_PROTOTYPES['Prince'], outcome, details)
+        game_round.ui['animate_card_effect_callback'](animation_data, continuation)
         return
 
     discarded_card = target_player.hand[0] if target_player.hand else None
-    is_princess = discarded_card and game_round.is_card_in_current_deck('Princess') and discarded_card.name == 'Princess'
+    is_princess = discarded_card and game_round.is_card_in_current_deck(
+        'Princess') and discarded_card.name == 'Princess'
     outcome = 'eliminated' if is_princess else 'neutral'
     details = {'discarded_card': discarded_card}
 
     def final_logic():
         if is_princess:
             game_round.log_message(f"{target_player.name} đã bỏ Công chúa (bị ép bởi Hoàng tử) và bị loại!")
-            if game_round.ui.get('add_to_global_discard_callback'): game_round.ui['add_to_global_discard_callback'](target_player, discarded_card)
+            if game_round.ui.get('add_to_global_discard_callback'): game_round.ui['add_to_global_discard_callback'](
+                target_player, discarded_card)
             target_player.force_discard(game_round, draw_new=False)
             game_round.eliminate_player(target_player, continuation)
         else:
             if discarded_card:
-                game_round.log_message(f"{target_player.name} bị buộc phải bỏ lá {discarded_card.name} và rút một lá mới.")
-                if game_round.ui.get('add_to_global_discard_callback'): game_round.ui['add_to_global_discard_callback'](target_player, discarded_card)
+                game_round.log_message(
+                    f"{target_player.name} bị buộc phải bỏ lá {discarded_card.name} và rút một lá mới.")
+                if game_round.ui.get('add_to_global_discard_callback'): game_round.ui['add_to_global_discard_callback'](
+                    target_player, discarded_card)
                 target_player.force_discard(game_round, draw_new=True)
-            else: # Target had no hand, just draws
+            else:  # Target had no hand, just draws
                 game_round.log_message(f"{target_player.name} không có bài, rút một lá mới.")
                 new_card = game_round.draw_from_deck_or_burned()
                 if new_card: target_player.add_card_to_hand(new_card)
@@ -326,7 +375,8 @@ def _resolve_prince_effect(game_round, target_player, continuation):
 def effect_king(game_round, acting_player, card_played, **kwargs):
     valid_targets = _get_generic_targets(game_round, acting_player)
     if acting_player.sycophant_target_self:
-        game_round.log_message(f"Kẻ nịnh bợ: {acting_player.name} phải tự chọn mình, nhưng Vua không thể. Hiệu ứng mất.")
+        game_round.log_message(
+            f"Kẻ nịnh bợ: {acting_player.name} phải tự chọn mình, nhưng Vua không thể. Hiệu ứng mất.")
         return False
     if not valid_targets:
         game_round.log_message("Vua: Không có mục tiêu hợp lệ.")
@@ -349,20 +399,26 @@ def effect_king(game_round, acting_player, card_played, **kwargs):
         )
         return True
 
+
 def _resolve_king_effect(game_round, player, target_player, continuation):
+    # --- FIX APPLIED ---
     if not player.hand or not target_player.hand:
         game_round.log_message("Tráo bài Vua cần cả hai người chơi đều có bài. Hiệu ứng mất.")
-        if continuation: continuation()
+        outcome = 'fail'
+        details = {'reason': 'Một trong hai người chơi không có bài.'}
+        animation_data = _prepare_animation_data(player, target_player, CARD_PROTOTYPES['King'], outcome, details)
+        game_round.ui['animate_card_effect_callback'](animation_data, continuation)
         return
 
     p_card, o_card = player.hand[0], target_player.hand[0]
 
     def perform_swap_animation():
         def final_logic():
-            player.hand[0], target_player.hand[0] = o_card, p_card # Actual swap
+            player.hand[0], target_player.hand[0] = o_card, p_card  # Actual swap
             log_details = f"{player.name} (Vua) tráo bài với {target_player.name}. {player.name} nhận {o_card.name}, {target_player.name} nhận {p_card.name}."
             game_round.log_message(log_details)
             if continuation: continuation()
+
         game_round.ui['animate_king_swap_callback'](player, target_player, p_card, o_card, final_logic)
 
     animation_data = _prepare_animation_data(player, target_player, CARD_PROTOTYPES['King'], 'neutral', {})
@@ -388,6 +444,7 @@ def effect_countess(game_round, acting_player, card_played, **kwargs):
         )
         return True
 
+
 def _resolve_countess_effect(game_round, player):
     game_round.log_message("Nữ Bá tước được chơi. Không có hiệu ứng đặc biệt.")
 
@@ -400,6 +457,7 @@ def effect_princess(game_round, acting_player, card_played, **kwargs):
     game_round.log_message(f"LỖI: Hiệu ứng Công chúa đã được thực thi, đáng lẽ phải bị chặn sớm hơn.")
     return False
 
+
 # --- Passive/Placeholder Effects for new cards ---
 # These cards have passive effects or effects not yet implemented.
 # They don't require user input, so they return False.
@@ -408,35 +466,42 @@ def effect_assassin(game_round, acting_player, card_played, **kwargs):
     game_round.log_message("Sát thủ được chơi. Không có hiệu ứng khi tự chơi.")
     return False
 
+
 def effect_jester(game_round, acting_player, card_played, **kwargs):
     game_round.log_message("Hiệu ứng Tên hề chưa được cài đặt.")
     return False
+
 
 def effect_cardinal(game_round, acting_player, card_played, **kwargs):
     game_round.log_message("Hiệu ứng Hồng y chưa được cài đặt.")
     return False
 
+
 def effect_baroness(game_round, acting_player, card_played, **kwargs):
     game_round.log_message("Hiệu ứng Nữ nam tước chưa được cài đặt.")
     return False
+
 
 def effect_sycophant(game_round, acting_player, card_played, **kwargs):
     game_round.log_message("Hiệu ứng Kẻ nịnh bợ chưa được cài đặt.")
     return False
 
+
 def effect_count(game_round, acting_player, card_played, **kwargs):
     game_round.log_message("Bá tước được chơi. Hiệu ứng của nó là bị động.")
     return False
+
 
 def effect_sheriff(game_round, acting_player, card_played, **kwargs):
     game_round.log_message("Nguyên soái được chơi. Hiệu ứng của nó là bị động.")
     return False
 
+
 def effect_queen_mother(game_round, acting_player, card_played, **kwargs):
     game_round.log_message("Hiệu ứng Nữ hoàng chưa được cài đặt.")
     return False
 
+
 def effect_bishop(game_round, acting_player, card_played, **kwargs):
     game_round.log_message("Hiệu ứng Giám mục chưa được cài đặt.")
     return False
-
